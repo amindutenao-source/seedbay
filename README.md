@@ -44,6 +44,9 @@ npm start
 - [README Complet](SEEDBAY-README.md)
 - [Points Critiques](POINTS-CRITIQUES.md)
 - [Guide de Déploiement](seedbay-deployment-guide.ts)
+- [Quick Setup](QUICK-SETUP.md)
+- [Post-Release Checklist](POST-RELEASE-CHECKLIST.md)
+- [Migration Plan](MIGRATION-PLAN.md)
 
 ## 🔐 Sécurité
 
