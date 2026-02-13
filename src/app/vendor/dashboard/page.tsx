@@ -61,7 +61,7 @@ export default function VendorDashboard() {
         if (projectsError) throw projectsError
 
         // Charger les statistiques
-        const projects = (projectsData ?? []) as Array<{ id: string }>
+        const projects = (projectsData ?? []) as Array<{ id: string; status?: string } & Record<string, unknown>>
         const projectIds = projects.map(p => p.id)
         const { data: purchasesData } = await supabase
           .from('purchases')
@@ -83,7 +83,7 @@ export default function VendorDashboard() {
         })
 
         // Enrichir les projets avec les stats de ventes
-        const enrichedProjects = (projectsData ?? []).map(project => ({
+        const enrichedProjects = projects.map(project => ({
           ...project,
           sales_count: salesByProject.get(project.id)?.count || 0,
           revenue: salesByProject.get(project.id)?.revenue || 0,
