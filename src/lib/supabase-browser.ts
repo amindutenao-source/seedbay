@@ -1,5 +1,4 @@
 import { createBrowserClient as createSsrBrowserClient, serialize } from '@supabase/ssr'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase-types'
 
 function getCookie(name: string) {
@@ -11,7 +10,7 @@ function getCookie(name: string) {
 // ============================================================================
 // CLIENT BROWSER (session basée sur cookies)
 // ============================================================================
-export function createBrowserClient(): SupabaseClient<Database> {
+export function createBrowserClient() {
   return createSsrBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
