@@ -141,7 +141,7 @@ export default function SignupPage() {
 
             <div>
               <label htmlFor="username" className="block text-sm text-gray-400 mb-2">
-                Nom d&apos;utilisateur
+                Nom utilisateur
               </label>
               <input
                 type="text"
