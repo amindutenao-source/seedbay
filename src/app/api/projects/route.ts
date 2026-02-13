@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase'
+import { isProjectStatus, type ProjectStatus } from '@/lib/constants'
 import { z } from 'zod'
 
 // Schéma de validation pour la création de projet (aligné sur le schéma SQL)
@@ -31,7 +32,8 @@ export async function GET(request: NextRequest) {
     const supabase = await createSupabaseServerClient()
     const { searchParams } = new URL(request.url)
 
-    const status = searchParams.get('status') || 'published'
+    const statusParam = searchParams.get('status')
+    const status: ProjectStatus = isProjectStatus(statusParam) ? statusParam : 'published'
     const category = searchParams.get('category')
     const search = searchParams.get('search')
     const limit = Math.min(parseInt(searchParams.get('limit') || '20', 10) || 20, 100)

@@ -61,19 +61,19 @@ export default function VendorDashboard() {
         if (projectsError) throw projectsError
 
         // Charger les statistiques
-        const { data: ordersData } = await supabase
-          .from('orders')
-          .select('project_id, amount_gross')
-          .eq('status', 'completed')
-          .in('project_id', projectsData?.map(p => p.id) || [])
+        const projectIds = projectsData?.map(p => p.id) || []
+        const { data: purchasesData } = await supabase
+          .from('purchases')
+          .select('project_id, order:orders!order_id ( amount )')
+          .in('project_id', projectIds)
 
         // Calculer les stats
         const salesByProject = new Map<string, { count: number; revenue: number }>()
-        ordersData?.forEach(order => {
-          const existing = salesByProject.get(order.project_id) || { count: 0, revenue: 0 }
-          salesByProject.set(order.project_id, {
+        purchasesData?.forEach(purchase => {
+          const existing = salesByProject.get(purchase.project_id) || { count: 0, revenue: 0 }
+          salesByProject.set(purchase.project_id, {
             count: existing.count + 1,
-            revenue: existing.revenue + (order.amount_gross || 0),
+            revenue: existing.revenue + (purchase.order?.amount || 0),
           })
         })
 
@@ -88,8 +88,8 @@ export default function VendorDashboard() {
         setStats({
           total_projects: enrichedProjects.length,
           published_projects: enrichedProjects.filter(p => p.status === 'published').length,
-          total_sales: ordersData?.length || 0,
-          total_revenue: ordersData?.reduce((sum, o) => sum + (o.amount_gross || 0), 0) || 0,
+          total_sales: purchasesData?.length || 0,
+          total_revenue: purchasesData?.reduce((sum, p) => sum + (p.order?.amount || 0), 0) || 0,
         })
       } catch (err) {
         console.error('Dashboard error:', err)

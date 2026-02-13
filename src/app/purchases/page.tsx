@@ -14,14 +14,18 @@ import { createBrowserClient } from '@/lib/supabase'
 
 interface Purchase {
   id: string;
-  amount_gross: number;
-  status: string;
+  order_id: string;
   created_at: string;
+  order: {
+    amount: number;
+    status: string;
+  } | null;
   project: {
     id: string;
+    slug: string;
     title: string;
     description: string;
-    thumbnail_url?: string;
+    thumbnail_url: string | null;
   };
 }
 
@@ -45,21 +49,24 @@ export default function PurchasesPage() {
         }
 
         const { data, error: fetchError } = await supabase
-          .from('orders')
+          .from('purchases')
           .select(`
             id,
-            amount_gross,
-            status,
+            order_id,
             created_at,
+            order:orders!order_id (
+              amount,
+              status
+            ),
             project:projects!project_id (
               id,
+              slug,
               title,
               description,
               thumbnail_url
             )
           `)
-          .eq('buyer_id', user.id)
-          .eq('status', 'completed')
+          .eq('user_id', user.id)
           .order('created_at', { ascending: false })
 
         if (fetchError) throw fetchError
@@ -75,14 +82,14 @@ export default function PurchasesPage() {
     loadPurchases()
   }, [supabase])
 
-  async function handleDownload(projectId: string) {
-    setDownloadingId(projectId)
+  async function handleDownload(orderId: string) {
+    setDownloadingId(orderId)
     try {
-      // Récupérer les fichiers du projet
+      // Récupérer les fichiers de la commande
       const { data: files, error: filesError } = await supabase
         .from('deliverables')
         .select('id')
-        .eq('project_id', projectId)
+        .eq('order_id', orderId)
 
       if (filesError) throw filesError
 
@@ -93,7 +100,11 @@ export default function PurchasesPage() {
 
       // Télécharger chaque fichier
       for (const file of files) {
-        const response = await fetch(`/api/files/${file.id}`)
+        const response = await fetch('/api/files/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ order_id: orderId, deliverable_id: file.id }),
+        })
         const data = await response.json()
 
         if (data.download_url) {
@@ -187,24 +198,24 @@ export default function PurchasesPage() {
                     <div className="mt-2 flex items-center gap-4 text-sm text-gray-500">
                       <span>Purchased {new Date(purchase.created_at).toLocaleDateString()}</span>
                       <span>•</span>
-                      <span>${purchase.amount_gross.toFixed(2)}</span>
+                      <span>${(purchase.order?.amount || 0).toFixed(2)}</span>
                     </div>
                   </div>
 
                   {/* Actions */}
                   <div className="flex-shrink-0 flex gap-3">
                     <Link
-                      href={`/projects/${purchase.project.id}`}
+                      href={`/projects/${purchase.project.slug}`}
                       className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
                     >
                       View Project
                     </Link>
                     <button
-                      onClick={() => handleDownload(purchase.project.id)}
-                      disabled={downloadingId === purchase.project.id}
+                      onClick={() => handleDownload(purchase.order_id)}
+                      disabled={downloadingId === purchase.order_id}
                       className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
                     >
-                      {downloadingId === purchase.project.id ? (
+                      {downloadingId === purchase.order_id ? (
                         <span className="flex items-center gap-2">
                           <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                             <circle

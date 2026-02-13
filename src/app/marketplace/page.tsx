@@ -1,156 +1,188 @@
-import Link from 'next/link'
-import Image from 'next/image'
-import { createSupabaseServerClient } from '@/lib/supabase'
+"use client";
 
-// ============================================================================
-// PAGE: /marketplace
-// Liste des projets publiés
-// ============================================================================
+import Link from "next/link";
+import { useState } from "react";
 
-export default async function MarketplacePage() {
-  // Récupérer les projets publiés (RLS applique automatiquement)
-  const supabase = await createSupabaseServerClient()
-  const { data: projects, error } = await supabase
-    .from('projects')
-    .select(`
-      id,
-      title,
-      slug,
-      description,
-      price,
-      currency,
-      thumbnail_url,
-      category,
-      tech_stack,
-      maturity_level,
-      avg_rating,
-      review_count,
-      purchase_count
-    `)
-    .eq('status', 'published')
-    .order('created_at', { ascending: false })
-    .limit(20)
+const mockProjects = [
+  { id: "1", title: "SaaS Starter Kit", slug: "saas-starter-kit", description: "Template complet pour lancer votre SaaS avec auth et paiements Stripe.", price: 299, category: "template", tech_stack: ["Next.js", "TypeScript", "Tailwind"], maturity_level: "Production", avg_rating: 4.8, purchase_count: 847, emoji: "🚀" },
+  { id: "2", title: "AI Content Generator", slug: "ai-content-generator", description: "Application de generation de contenu avec GPT-4.", price: 499, category: "application", tech_stack: ["React", "Node.js", "OpenAI"], maturity_level: "Production", avg_rating: 4.9, purchase_count: 523, emoji: "🤖" },
+  { id: "3", title: "E-commerce API", slug: "ecommerce-api", description: "API REST complete pour e-commerce.", price: 199, category: "api", tech_stack: ["Node.js", "Express", "PostgreSQL"], maturity_level: "Production", avg_rating: 4.7, purchase_count: 412, emoji: "🛒" },
+  { id: "4", title: "Analytics Dashboard", slug: "analytics-dashboard", description: "Dashboard analytics moderne avec graphiques.", price: 349, category: "application", tech_stack: ["Vue.js", "D3.js", "Python"], maturity_level: "Beta", avg_rating: 4.6, purchase_count: 234, emoji: "📊" },
+  { id: "5", title: "Auth Microservice", slug: "auth-microservice", description: "Microservice auth avec JWT et OAuth2.", price: 149, category: "api", tech_stack: ["Go", "gRPC", "PostgreSQL"], maturity_level: "Production", avg_rating: 4.9, purchase_count: 892, emoji: "🔐" },
+  { id: "6", title: "Landing Page Builder", slug: "landing-page-builder", description: "Constructeur de landing pages drag and drop.", price: 399, category: "application", tech_stack: ["React", "TypeScript", "Supabase"], maturity_level: "Production", avg_rating: 4.7, purchase_count: 345, emoji: "🎨" },
+];
+
+const categories = [
+  { id: "all", name: "Tous", emoji: "🌟" },
+  { id: "application", name: "Applications", emoji: "💻" },
+  { id: "template", name: "Templates", emoji: "📋" },
+  { id: "api", name: "APIs", emoji: "🔌" },
+];
+
+const techFilters = ["Next.js", "React", "TypeScript", "Node.js", "Python", "Vue.js", "Go"];
+
+export default function MarketplacePage() {
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedTechs, setSelectedTechs] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("popular");
+
+  const filteredProjects = mockProjects.filter((project) => {
+    const matchesCategory = selectedCategory === "all" || project.category === selectedCategory;
+    const matchesTech = selectedTechs.length === 0 || selectedTechs.some((tech) => project.tech_stack.includes(tech));
+    const matchesSearch = project.title.toLowerCase().includes(searchQuery.toLowerCase()) || project.description.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesTech && matchesSearch;
+  });
+
+  const sortedProjects = [...filteredProjects].sort((a, b) => {
+    switch (sortBy) {
+      case "price-low": return a.price - b.price;
+      case "price-high": return b.price - a.price;
+      case "rating": return b.avg_rating - a.avg_rating;
+      default: return b.purchase_count - a.purchase_count;
+    }
+  });
+
+  const toggleTech = (tech: string) => {
+    setSelectedTechs((prev) => prev.includes(tech) ? prev.filter((t) => t !== tech) : [...prev, tech]);
+  };
 
   return (
-    <div className="min-h-screen bg-slate-900">
-      {/* Navigation */}
-      <nav className="border-b border-white/10">
+    <div className="min-h-screen bg-gray-900">
+      <nav className="border-b border-gray-800 bg-gray-900/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <Link href="/" className="text-2xl font-bold text-white">
-              🚀 SeedBay
+            <Link href="/" className="flex items-center space-x-2">
+              <span className="text-2xl">🌱</span>
+              <span className="text-xl font-bold text-white">SeedBay</span>
             </Link>
             <div className="flex items-center space-x-4">
-              <Link href="/auth/login" className="text-gray-300 hover:text-white">
-                Connexion
-              </Link>
-              <Link 
-                href="/auth/signup" 
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-              >
-                S&apos;inscrire
-              </Link>
+              <Link href="/marketplace" className="text-emerald-400 font-medium">Marketplace</Link>
+              <Link href="/submit" className="text-gray-300 hover:text-white">Vendre</Link>
+              <Link href="/auth/login" className="text-gray-300 hover:text-white">Connexion</Link>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Header */}
-      <div className="bg-gradient-to-b from-blue-900/50 to-transparent py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold text-white mb-4">Marketplace</h1>
-          <p className="text-gray-400">Découvrez des projets SaaS prêts à lancer</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Marketplace</h1>
+          <p className="text-gray-400">Decouvrez des projets innovants prets a etre acquis</p>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-8">
+          <div className="lg:w-64 flex-shrink-0">
+            <div className="bg-gray-800 rounded-xl p-6 sticky top-24">
+              <h3 className="text-lg font-semibold text-white mb-4">Filtres</h3>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-400 mb-2">Recherche</label>
+                <input
+                  type="text"
+                  placeholder="Rechercher..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-400 mb-2">Categories</label>
+                <div className="space-y-2">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat.id)}
+                      className={`w-full flex items-center space-x-2 px-3 py-2 rounded-lg text-left transition-colors ${selectedCategory === cat.id ? "bg-emerald-600 text-white" : "text-gray-300 hover:bg-gray-700"}`}
+                    >
+                      <span>{cat.emoji}</span>
+                      <span>{cat.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-400 mb-2">Technologies</label>
+                <div className="flex flex-wrap gap-2">
+                  {techFilters.map((tech) => (
+                    <button
+                      key={tech}
+                      onClick={() => toggleTech(tech)}
+                      className={`px-2 py-1 text-xs rounded-full transition-colors ${selectedTechs.includes(tech) ? "bg-emerald-600 text-white" : "bg-gray-700 text-gray-300 hover:bg-gray-600"}`}
+                    >
+                      {tech}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Trier par</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="popular">Popularite</option>
+                  <option value="rating">Note</option>
+                  <option value="price-low">Prix croissant</option>
+                  <option value="price-high">Prix decroissant</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-6">
+              <p className="text-gray-400">{sortedProjects.length} projets trouves</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {sortedProjects.map((project) => (
+                <div key={project.id} className="bg-gray-800 rounded-xl overflow-hidden hover:ring-2 hover:ring-emerald-500 transition-all group">
+                  <div className="h-40 bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center">
+                    <span className="text-5xl">{project.emoji}</span>
+                  </div>
+                  <div className="p-5">
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="text-lg font-semibold text-white group-hover:text-emerald-400 transition-colors">{project.title}</h3>
+                      <div className="flex items-center text-yellow-400">
+                        <span>⭐</span>
+                        <span className="ml-1 text-sm text-gray-300">{project.avg_rating}</span>
+                      </div>
+                    </div>
+                    <p className="text-gray-400 text-sm mb-4 line-clamp-2">{project.description}</p>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {project.tech_stack.map((tech) => (
+                        <span key={tech} className="bg-gray-700 text-gray-300 text-xs px-2 py-1 rounded-full">{tech}</span>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-700">
+                      <div>
+                        <p className="text-emerald-400 font-bold text-lg">{project.price} EUR</p>
+                        <p className="text-gray-500 text-xs">{project.purchase_count} ventes</p>
+                      </div>
+                      <Link href={"/projects/" + project.slug} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                        Voir details
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {sortedProjects.length === 0 && (
+              <div className="text-center py-12">
+                <span className="text-4xl mb-4 block">🔍</span>
+                <h3 className="text-xl font-semibold text-white mb-2">Aucun projet trouve</h3>
+                <p className="text-gray-400">Essayez de modifier vos filtres</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      {/* Projects Grid */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {error ? (
-          <div className="text-center py-20">
-            <p className="text-red-400">Erreur lors du chargement des projets</p>
-          </div>
-        ) : !projects || projects.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-gray-400 text-lg">Aucun projet disponible pour le moment</p>
-            <p className="text-gray-500 mt-2">Revenez bientôt !</p>
-          </div>
-        ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
-              <Link 
-                key={project.id} 
-                href={`/projects/${project.id}`}
-                className="bg-white/5 rounded-xl overflow-hidden border border-white/10 hover:border-blue-500/50 transition group"
-              >
-                {/* Thumbnail */}
-                <div className="aspect-video bg-gradient-to-br from-blue-600 to-purple-600 relative">
-                  {project.thumbnail_url ? (
-                    <Image
-                      src={project.thumbnail_url}
-                      alt={project.title}
-                      fill
-                      className="object-cover"
-                      sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-4xl">💻</span>
-                    </div>
-                  )}
-                  {/* Badge maturité */}
-                  <span className="absolute top-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded">
-                    {project.maturity_level}
-                  </span>
-                </div>
-
-                {/* Content */}
-                <div className="p-5">
-                  <h3 className="text-lg font-semibold text-white group-hover:text-blue-400 transition">
-                    {project.title}
-                  </h3>
-                  <p className="text-gray-400 text-sm mt-2 line-clamp-2">
-                    {project.description}
-                  </p>
-
-                  {/* Tech Stack */}
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {project.tech_stack?.slice(0, 3).map((tech) => (
-                      <span 
-                        key={tech} 
-                        className="bg-blue-500/20 text-blue-300 text-xs px-2 py-0.5 rounded"
-                      >
-                        {tech}
-                      </span>
-                    ))}
-                    {project.tech_stack && project.tech_stack.length > 3 && (
-                      <span className="text-gray-500 text-xs">+{project.tech_stack.length - 3}</span>
-                    )}
-                  </div>
-
-                  {/* Footer */}
-                  <div className="flex justify-between items-center mt-4 pt-4 border-t border-white/10">
-                    <div className="flex items-center gap-2">
-                      {project.avg_rating > 0 && (
-                        <span className="text-yellow-400 text-sm">
-                          ★ {project.avg_rating.toFixed(1)}
-                        </span>
-                      )}
-                      {project.purchase_count > 0 && (
-                        <span className="text-gray-500 text-sm">
-                          {project.purchase_count} ventes
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xl font-bold text-white">
-                      ${project.price}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-      </main>
     </div>
-  )
+  );
 }

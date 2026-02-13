@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     const supabase = await createSupabaseServerClient()
     const { data: project, error: projectError } = await supabase
       .from('projects')
-      .select('id, seller_id, price, title, status')
+      .select('id, slug, seller_id, price, title, status, currency')
       .eq('id', project_id)
       .eq('status', 'published') // ✓ Vérifier que le projet est publié
       .single()
@@ -67,18 +67,26 @@ export async function POST(request: NextRequest) {
     }
 
     // ÉTAPE 5: Vérifier qu'il n'y a pas d'achat précédent
+    const { data: existingPurchase } = await supabase
+      .from('purchases')
+      .select('id')
+      .eq('project_id', project_id)
+      .eq('user_id', userId)
+      .single()
+
+    if (existingPurchase) {
+      return badRequestResponse('Vous avez déjà acheté ce projet')
+    }
+
     const { data: existingOrder } = await supabase
       .from('orders')
       .select('id, status')
       .eq('project_id', project_id)
-      .eq('buyer_id', userId)
-      .in('status', ['pending', 'processing', 'completed'])
+      .eq('user_id', userId)
+      .in('status', ['pending', 'paid'])
       .single()
 
     if (existingOrder) {
-      if (existingOrder.status === 'completed') {
-        return badRequestResponse('Vous avez déjà acheté ce projet')
-      }
       return badRequestResponse('Une commande est déjà en cours pour ce projet')
     }
 
@@ -88,10 +96,8 @@ export async function POST(request: NextRequest) {
     }
 
     // ÉTAPE 7: Calculer les frais CÔTÉ SERVEUR (JAMAIS faire confiance au client)
-    const amountGross = Math.round(project.price * 100) // Convertir en centimes
-    const platformFeePercent = 0.15 // 15% commission
-    const platformFee = Math.round(amountGross * platformFeePercent)
-    const sellerPayout = amountGross - platformFee
+    const amountCents = Math.round(project.price * 100) // Convertir en centimes
+    const currency = project.currency || 'USD'
 
     // ÉTAPE 8: Créer la commande avec status 'pending'
     const pendingPaymentIntentId = `pending_${randomUUID()}`
@@ -99,12 +105,9 @@ export async function POST(request: NextRequest) {
       .from('orders')
       .insert({
         project_id: project_id,
-        buyer_id: userId,
-        seller_id: project.seller_id,
-        amount_gross: project.price,
-        platform_fee: project.price * platformFeePercent,
-        seller_payout: project.price * (1 - platformFeePercent),
-        currency: 'USD',
+        user_id: userId,
+        amount: project.price,
+        currency,
         stripe_payment_intent_id: pendingPaymentIntentId, // Temporaire, unique, sera mis à jour
         status: 'pending',
       })
@@ -121,14 +124,13 @@ export async function POST(request: NextRequest) {
     try {
       paymentIntent = await stripe.paymentIntents.create(
         {
-          amount: amountGross,
-          currency: 'usd',
+          amount: amountCents,
+          currency: currency.toLowerCase(),
           description: `SeedBay: ${project.title}`,
           metadata: {
             order_id: order.id,
             project_id: project_id,
-            seller_id: project.seller_id,
-            buyer_id: userId,
+            user_id: userId,
           },
         } as Stripe.PaymentIntentCreateParams,
         {
@@ -146,7 +148,7 @@ export async function POST(request: NextRequest) {
     // ÉTAPE 10: Mettre à jour la commande avec l'ID du PaymentIntent
     const { error: updateError } = await supabase
       .from('orders')
-      .update({ stripe_payment_intent_id: paymentIntent.id })
+      .update({ stripe_payment_intent_id: paymentIntent.id, updated_at: new Date().toISOString() })
       .eq('id', order.id)
 
     if (updateError) {
@@ -176,9 +178,10 @@ export async function POST(request: NextRequest) {
     return successResponse({
       order_id: order.id,
       project_id: project_id,
+      project_slug: project.slug,
       project_title: project.title,
       amount: project.price,
-      currency: 'USD',
+      currency,
       // ✓ Seulement le client_secret pour Stripe Elements
       client_secret: paymentIntent.client_secret,
     }, 201)

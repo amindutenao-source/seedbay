@@ -59,7 +59,7 @@ export const CreateOrderSchema = z.object({
  * Vérifie que l'utilisateur est authentifié
  * Retourne les informations de l'utilisateur ou une erreur
  */
-export async function requireAuth(request: NextRequest): Promise<AuthResult> {
+export async function requireAuth(_request: NextRequest): Promise<AuthResult> {
   try {
     const supabase = await createSupabaseServerClient()
     const { data: { user }, error } = await supabase.auth.getUser()

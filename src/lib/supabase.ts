@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -31,8 +31,9 @@ export type Database = {
           updated_at: string
           email_verified_at: string | null
         }
-        Insert: Omit<Database['public']['Tables']['users']['Row'], 'created_at' | 'updated_at'>
-        Update: Partial<Database['public']['Tables']['users']['Insert']>
+        Insert: Partial<Database['public']['Tables']['users']['Row']>
+        Update: Partial<Database['public']['Tables']['users']['Row']>
+        Relationships: []
       }
       projects: {
         Row: {
@@ -63,50 +64,95 @@ export type Database = {
           updated_at: string
           published_at: string | null
         }
-        Insert: Omit<Database['public']['Tables']['projects']['Row'], 'id' | 'created_at' | 'updated_at' | 'view_count' | 'purchase_count' | 'avg_rating' | 'review_count'>
-        Update: Partial<Database['public']['Tables']['projects']['Insert']>
+        Insert: Partial<Database['public']['Tables']['projects']['Row']>
+        Update: Partial<Database['public']['Tables']['projects']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'seller_id',
+            columns: ['seller_id'],
+            referencedRelation: 'users',
+            referencedColumns: ['id'],
+          },
+        ]
       }
       orders: {
         Row: {
           id: string
           project_id: string
-          buyer_id: string
-          seller_id: string
-          amount_gross: number
-          platform_fee: number
-          seller_payout: number
-          currency: string
+          user_id: string
           stripe_payment_intent_id: string
-          stripe_charge_id: string | null
-          stripe_customer_id: string | null
-          status: 'pending' | 'processing' | 'completed' | 'failed' | 'refunded'
-          status_updated_at: string
-          payout_id: string | null
-          payout_date: string | null
+          amount: number
+          currency: string | null
+          status: 'pending' | 'paid' | 'failed' | 'refunded'
           created_at: string
-          completed_at: string | null
-          refunded_at: string | null
+          updated_at: string | null
+          stripe_charge_id: string | null
         }
-        Insert: Omit<Database['public']['Tables']['orders']['Row'], 'id' | 'created_at' | 'status_updated_at'>
-        Update: Partial<Database['public']['Tables']['orders']['Insert']>
+        Insert: Partial<Database['public']['Tables']['orders']['Row']>
+        Update: Partial<Database['public']['Tables']['orders']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'project_id',
+            columns: ['project_id'],
+            referencedRelation: 'projects',
+            referencedColumns: ['id'],
+          },
+          {
+            foreignKeyName: 'user_id',
+            columns: ['user_id'],
+            referencedRelation: 'users',
+            referencedColumns: ['id'],
+          },
+        ]
+      }
+      purchases: {
+        Row: {
+          id: string
+          user_id: string
+          project_id: string
+          order_id: string
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['purchases']['Row']>
+        Update: Partial<Database['public']['Tables']['purchases']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'user_id',
+            columns: ['user_id'],
+            referencedRelation: 'users',
+            referencedColumns: ['id'],
+          },
+          {
+            foreignKeyName: 'project_id',
+            columns: ['project_id'],
+            referencedRelation: 'projects',
+            referencedColumns: ['id'],
+          },
+          {
+            foreignKeyName: 'order_id',
+            columns: ['order_id'],
+            referencedRelation: 'orders',
+            referencedColumns: ['id'],
+          },
+        ]
       }
       deliverables: {
         Row: {
           id: string
-          project_id: string
-          title: string
-          description: string | null
-          file_key: string
-          file_type: 'code' | 'document' | 'design' | 'data' | 'other'
-          file_size: number
-          file_mime_type: string | null
-          version: number
-          is_latest: boolean
-          created_at: string
-          updated_at: string
+          order_id: string
+          url: string
+          delivered_at: string | null
         }
-        Insert: Omit<Database['public']['Tables']['deliverables']['Row'], 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Database['public']['Tables']['deliverables']['Insert']>
+        Insert: Partial<Database['public']['Tables']['deliverables']['Row']>
+        Update: Partial<Database['public']['Tables']['deliverables']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'order_id',
+            columns: ['order_id'],
+            referencedRelation: 'orders',
+            referencedColumns: ['id'],
+          },
+        ]
       }
       reviews: {
         Row: {
@@ -120,8 +166,28 @@ export type Database = {
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['reviews']['Row'], 'id' | 'created_at' | 'updated_at' | 'helpful_count'>
-        Update: Partial<Database['public']['Tables']['reviews']['Insert']>
+        Insert: Partial<Database['public']['Tables']['reviews']['Row']>
+        Update: Partial<Database['public']['Tables']['reviews']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'order_id',
+            columns: ['order_id'],
+            referencedRelation: 'orders',
+            referencedColumns: ['id'],
+          },
+          {
+            foreignKeyName: 'reviewer_id',
+            columns: ['reviewer_id'],
+            referencedRelation: 'users',
+            referencedColumns: ['id'],
+          },
+          {
+            foreignKeyName: 'project_id',
+            columns: ['project_id'],
+            referencedRelation: 'projects',
+            referencedColumns: ['id'],
+          },
+        ]
       }
       favorites: {
         Row: {
@@ -130,8 +196,22 @@ export type Database = {
           project_id: string
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['favorites']['Row'], 'id' | 'created_at'>
-        Update: Partial<Database['public']['Tables']['favorites']['Insert']>
+        Insert: Partial<Database['public']['Tables']['favorites']['Row']>
+        Update: Partial<Database['public']['Tables']['favorites']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'user_id',
+            columns: ['user_id'],
+            referencedRelation: 'users',
+            referencedColumns: ['id'],
+          },
+          {
+            foreignKeyName: 'project_id',
+            columns: ['project_id'],
+            referencedRelation: 'projects',
+            referencedColumns: ['id'],
+          },
+        ]
       }
       messages: {
         Row: {
@@ -145,8 +225,28 @@ export type Database = {
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['messages']['Row'], 'id' | 'created_at' | 'updated_at'>
-        Update: Partial<Database['public']['Tables']['messages']['Insert']>
+        Insert: Partial<Database['public']['Tables']['messages']['Row']>
+        Update: Partial<Database['public']['Tables']['messages']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'order_id',
+            columns: ['order_id'],
+            referencedRelation: 'orders',
+            referencedColumns: ['id'],
+          },
+          {
+            foreignKeyName: 'sender_id',
+            columns: ['sender_id'],
+            referencedRelation: 'users',
+            referencedColumns: ['id'],
+          },
+          {
+            foreignKeyName: 'recipient_id',
+            columns: ['recipient_id'],
+            referencedRelation: 'users',
+            referencedColumns: ['id'],
+          },
+        ]
       }
       audit_logs: {
         Row: {
@@ -161,8 +261,16 @@ export type Database = {
           user_agent: string | null
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['audit_logs']['Row'], 'id' | 'created_at'>
-        Update: Partial<Database['public']['Tables']['audit_logs']['Insert']>
+        Insert: Partial<Database['public']['Tables']['audit_logs']['Row']>
+        Update: Partial<Database['public']['Tables']['audit_logs']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'user_id',
+            columns: ['user_id'],
+            referencedRelation: 'users',
+            referencedColumns: ['id'],
+          },
+        ]
       }
       downloads: {
         Row: {
@@ -173,9 +281,49 @@ export type Database = {
           download_ip: string | null
           download_user_agent: string | null
         }
-        Insert: Omit<Database['public']['Tables']['downloads']['Row'], 'id' | 'downloaded_at'>
-        Update: Partial<Database['public']['Tables']['downloads']['Insert']>
+        Insert: Partial<Database['public']['Tables']['downloads']['Row']>
+        Update: Partial<Database['public']['Tables']['downloads']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'order_id',
+            columns: ['order_id'],
+            referencedRelation: 'orders',
+            referencedColumns: ['id'],
+          },
+          {
+            foreignKeyName: 'deliverable_id',
+            columns: ['deliverable_id'],
+            referencedRelation: 'deliverables',
+            referencedColumns: ['id'],
+          },
+        ]
       }
+      stripe_events: {
+        Row: {
+          id: string
+          event_id: string
+          event_type: string
+          payload: Record<string, unknown>
+          status: 'received' | 'processed' | 'failed'
+          created_at: string
+          processed_at: string | null
+        }
+        Insert: Partial<Database['public']['Tables']['stripe_events']['Row']>
+        Update: Partial<Database['public']['Tables']['stripe_events']['Row']>
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
     }
   }
 }
@@ -183,7 +331,7 @@ export type Database = {
 // ============================================================================
 // CLIENT BROWSER (pour composants client)
 // ============================================================================
-export function createBrowserClient() {
+export function createBrowserClient(): SupabaseClient<Database> {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -193,7 +341,7 @@ export function createBrowserClient() {
 // ============================================================================
 // CLIENT SERVER (pour Server Components et API Routes)
 // ============================================================================
-export async function createSupabaseServerClient() {
+export async function createSupabaseServerClient(): Promise<SupabaseClient<Database>> {
   const cookieStore = await cookies()
 
   return createServerClient<Database>(
@@ -201,30 +349,37 @@ export async function createSupabaseServerClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return cookieStore.getAll()
+        get(key: string) {
+          return cookieStore.get(key)?.value
         },
-        setAll(cookiesToSet) {
+        set(key: string, value: string, options: CookieOptions) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
+            cookieStore.set({ name: key, value, ...options })
           } catch {
-            // The `setAll` method was called from a Server Component.
+            // The `set` method was called from a Server Component.
             // This can be ignored if you have middleware refreshing
             // user sessions.
           }
         },
+        remove(key: string, options: CookieOptions) {
+          try {
+            cookieStore.set({ name: key, value: '', ...options, maxAge: 0 })
+          } catch {
+            // The `remove` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing
+            // user sessions.
+          }
+        }
       },
     }
-  )
+  ) as unknown as SupabaseClient<Database>
 }
 
 // ============================================================================
 // CLIENT ADMIN (pour opérations privilégiées - webhook, etc.)
 // ⚠️ ATTENTION: Ne jamais exposer côté client
 // ============================================================================
-export function createSupabaseAdminClient() {
+export function createSupabaseAdminClient(): SupabaseClient<Database> {
   return createClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,

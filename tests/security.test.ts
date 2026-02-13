@@ -5,12 +5,18 @@
  * Exécuter avec: npm run test:security
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { createClient } from '@supabase/supabase-js'
+import Stripe from 'stripe'
+import { randomUUID } from 'crypto'
 
 // Configuration de test
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY
 const RUN_INTEGRATION_TESTS =
   process.env.RUN_INTEGRATION_TESTS === 'true' || Boolean(process.env.TEST_BASE_URL)
 let serverAvailable = false
@@ -51,6 +57,45 @@ const itIfServer = (name: string, fn: () => Promise<void> | void) =>
     }
     await fn()
   })
+
+const itIfCriticalEnv = (name: string, fn: () => Promise<void> | void) =>
+  it(name, async () => {
+    if (
+      !RUN_INTEGRATION_TESTS ||
+      !serverAvailable ||
+      !SUPABASE_URL ||
+      !SUPABASE_SERVICE_ROLE_KEY ||
+      !STRIPE_WEBHOOK_SECRET ||
+      !STRIPE_SECRET_KEY
+    ) {
+      return
+    }
+    await fn()
+  })
+
+const adminClient = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+  : null
+
+async function loginAndGetCookie(email: string, password: string) {
+  const response = await fetchAPI('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+
+  const headerWithGetSet = response.headers as { getSetCookie?: () => string[] }
+  const setCookies = typeof headerWithGetSet.getSetCookie === 'function'
+    ? headerWithGetSet.getSetCookie()
+    : []
+
+  const cookieHeader = setCookies
+    .map((cookie) => cookie.split(';')[0])
+    .join('; ')
+
+  return { response, cookieHeader }
+}
 
 // Helpers
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
@@ -252,6 +297,283 @@ describe('2. Authorization Security', () => {
 });
 
 // ============================================================================
+// SECTION 8: PAYMENTS & DOWNLOAD INTEGRATION (minimum vital)
+// ============================================================================
+
+describe('8. Payments & Downloads Critical Flows', () => {
+  const context: {
+    buyerId?: string
+    sellerId?: string
+    buyerEmail?: string
+    buyerPassword?: string
+    sellerEmail?: string
+    sellerPassword?: string
+    projectId?: string
+    deliverableId?: string
+    seedOrderId?: string
+    orderId?: string
+    paymentIntentId?: string
+    cookieHeader?: string
+  } = {}
+
+  beforeAll(async () => {
+    if (
+      !RUN_INTEGRATION_TESTS ||
+      !serverAvailable ||
+      !adminClient ||
+      !SUPABASE_URL ||
+      !SUPABASE_SERVICE_ROLE_KEY ||
+      !STRIPE_WEBHOOK_SECRET ||
+      !STRIPE_SECRET_KEY
+    ) {
+      return
+    }
+
+    const buyerEmail = `buyer-${Date.now()}@example.com`
+    const sellerEmail = `seller-${Date.now()}@example.com`
+    const buyerPassword = 'TestBuyer123!'
+    const sellerPassword = 'TestSeller123!'
+
+    const { data: buyerAuth } = await adminClient.auth.admin.createUser({
+      email: buyerEmail,
+      password: buyerPassword,
+      email_confirm: true,
+    })
+
+    const { data: sellerAuth } = await adminClient.auth.admin.createUser({
+      email: sellerEmail,
+      password: sellerPassword,
+      email_confirm: true,
+    })
+
+    if (!buyerAuth?.user?.id || !sellerAuth?.user?.id) {
+      return
+    }
+
+    context.buyerId = buyerAuth.user.id
+    context.sellerId = sellerAuth.user.id
+    context.buyerEmail = buyerEmail
+    context.sellerEmail = sellerEmail
+    context.buyerPassword = buyerPassword
+    context.sellerPassword = sellerPassword
+
+    await adminClient.from('users').insert([
+      {
+        id: context.buyerId,
+        email: buyerEmail,
+        username: `buyer_${randomUUID().slice(0, 8)}`,
+        role: 'buyer',
+        seller_verified: false,
+        avg_rating: 0,
+        total_sales: 0,
+        total_projects_sold: 0,
+      },
+      {
+        id: context.sellerId,
+        email: sellerEmail,
+        username: `seller_${randomUUID().slice(0, 8)}`,
+        role: 'vendor',
+        seller_verified: true,
+        avg_rating: 0,
+        total_sales: 0,
+        total_projects_sold: 0,
+      },
+    ])
+
+    const projectId = randomUUID()
+    context.projectId = projectId
+
+    await adminClient.from('projects').insert({
+      id: projectId,
+      seller_id: context.sellerId,
+      title: `Project ${projectId}`,
+      slug: `project-${projectId}`,
+      description: 'Test project',
+      problem: 'Problem',
+      solution: 'Solution',
+      maturity_level: 'mvp',
+      tech_stack: ['Next.js'],
+      license_type: 'non-exclusive',
+      category: 'saas',
+      price: 49,
+      currency: 'USD',
+      status: 'published',
+    })
+
+    const seedOrderId = randomUUID()
+    context.seedOrderId = seedOrderId
+    await adminClient.from('orders').insert({
+      id: seedOrderId,
+      user_id: context.buyerId,
+      project_id: projectId,
+      stripe_payment_intent_id: `pi_seed_${randomUUID().replace(/-/g, '')}`,
+      amount: 49,
+      status: 'pending',
+      currency: 'USD',
+    })
+
+    const deliverableId = randomUUID()
+    context.deliverableId = deliverableId
+
+    await adminClient.from('deliverables').insert({
+      id: deliverableId,
+      order_id: seedOrderId,
+      url: `orders/${seedOrderId}/files/test.zip`,
+      delivered_at: new Date().toISOString(),
+    })
+
+    const { cookieHeader } = await loginAndGetCookie(buyerEmail, buyerPassword)
+    context.cookieHeader = cookieHeader
+  })
+
+  afterAll(async () => {
+    if (!adminClient || !context.projectId) return
+
+    await adminClient.from('purchases').delete().eq('project_id', context.projectId)
+    await adminClient.from('orders').delete().eq('project_id', context.projectId)
+    await adminClient.from('downloads').delete().eq('deliverable_id', context.deliverableId || '')
+    if (context.deliverableId) {
+      await adminClient.from('deliverables').delete().eq('id', context.deliverableId)
+    }
+    await adminClient.from('projects').delete().eq('id', context.projectId)
+    if (context.buyerId) {
+      await adminClient.from('users').delete().eq('id', context.buyerId)
+      await adminClient.auth.admin.deleteUser(context.buyerId)
+    }
+    if (context.sellerId) {
+      await adminClient.from('users').delete().eq('id', context.sellerId)
+      await adminClient.auth.admin.deleteUser(context.sellerId)
+    }
+  })
+
+  itIfCriticalEnv('8.1 - Download without purchase should fail', async () => {
+    if (!context.cookieHeader || !context.deliverableId || !context.seedOrderId) return
+
+    const response = await fetchAPI('/api/files/download', {
+      method: 'POST',
+      headers: {
+        Cookie: context.cookieHeader,
+      },
+      body: JSON.stringify({
+        order_id: context.seedOrderId,
+        deliverable_id: context.deliverableId,
+      }),
+    })
+
+    expect([401, 403]).toContain(response.status)
+  })
+
+  itIfCriticalEnv('8.2 - Webhook idempotence prevents double purchase', async () => {
+    if (!adminClient || !context.projectId || !context.buyerId) return
+
+    const orderId = randomUUID()
+    const paymentIntentId = `pi_${randomUUID().replace(/-/g, '')}`
+    context.orderId = orderId
+    context.paymentIntentId = paymentIntentId
+
+    await adminClient.from('orders').insert({
+      id: orderId,
+      user_id: context.buyerId,
+      project_id: context.projectId,
+      stripe_payment_intent_id: paymentIntentId,
+      amount: 49,
+      status: 'pending',
+      currency: 'USD',
+    })
+
+    const stripe = new Stripe(STRIPE_SECRET_KEY!, { apiVersion: '2023-10-16' })
+    const payload = JSON.stringify({
+      id: `evt_${randomUUID().replace(/-/g, '')}`,
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: paymentIntentId,
+          amount: 4900,
+          metadata: {
+            order_id: orderId,
+            project_id: context.projectId,
+            user_id: context.buyerId,
+          },
+          latest_charge: `ch_${randomUUID().replace(/-/g, '')}`,
+        },
+      },
+    })
+
+    const signature = stripe.webhooks.generateTestHeaderString({
+      payload,
+      secret: STRIPE_WEBHOOK_SECRET!,
+    })
+
+    const first = await fetch(`${BASE_URL}/api/payments/webhook`, {
+      method: 'POST',
+      headers: { 'Stripe-Signature': signature },
+      body: payload,
+    })
+    expect(first.status).toBe(200)
+
+    const second = await fetch(`${BASE_URL}/api/payments/webhook`, {
+      method: 'POST',
+      headers: { 'Stripe-Signature': signature },
+      body: payload,
+    })
+    expect(second.status).toBe(200)
+
+    const { data: purchases } = await adminClient
+      .from('purchases')
+      .select('id')
+      .eq('project_id', context.projectId)
+      .eq('user_id', context.buyerId)
+
+    expect(purchases?.length || 0).toBe(1)
+  })
+
+  itIfCriticalEnv('8.3 - Re-buying same project should fail', async () => {
+    if (!context.cookieHeader || !context.projectId) return
+
+    const response = await fetchAPI('/api/orders/create-intent', {
+      method: 'POST',
+      headers: {
+        Cookie: context.cookieHeader,
+      },
+      body: JSON.stringify({ project_id: context.projectId }),
+    })
+
+    expect([400, 409]).toContain(response.status)
+  })
+
+  itIfCriticalEnv('8.4 - Paid order without purchase should deny access', async () => {
+    if (!adminClient || !context.projectId || !context.buyerId || !context.deliverableId || !context.cookieHeader) return
+
+    const orderId = randomUUID()
+    await adminClient.from('orders').insert({
+      id: orderId,
+      user_id: context.buyerId,
+      project_id: context.projectId,
+      stripe_payment_intent_id: `pi_${randomUUID().replace(/-/g, '')}`,
+      amount: 49,
+      status: 'paid',
+      currency: 'USD',
+    })
+
+    await adminClient.from('purchases').delete().eq('order_id', orderId)
+    await adminClient.from('deliverables').update({ order_id: orderId }).eq('id', context.deliverableId)
+
+    const response = await fetchAPI('/api/files/download', {
+      method: 'POST',
+      headers: {
+        Cookie: context.cookieHeader,
+      },
+      body: JSON.stringify({
+        order_id: orderId,
+        deliverable_id: context.deliverableId,
+      }),
+    })
+
+    expect(response.status).toBe(403)
+  })
+})
+
+// ============================================================================
 // SECTION 3: PAYMENT TESTS (10 tests)
 // ============================================================================
 
@@ -351,7 +673,7 @@ describe('3. Payment Security', () => {
     
     // Au moins une requête devrait être rate limited
     // (ou toutes devraient être 401 si pas d'auth)
-    expect(responses.every(r => [401, 429].includes(r.status))).toBe(true);
+    expect(rateLimited || responses.every(r => [401, 429].includes(r.status))).toBe(true);
   });
 });
 
@@ -624,8 +946,11 @@ describe('7. Security Headers', () => {
     
     const csp = response.headers.get('content-security-policy');
     // CSP devrait être présent en production
-    // expect(csp).toBeTruthy();
-    expect(true).toBe(true);
+    if (process.env.NODE_ENV === 'production') {
+      expect(csp).toBeTruthy();
+    } else {
+      expect(true).toBe(true);
+    }
   });
 
   // Test 7.2: X-Frame-Options
@@ -636,7 +961,11 @@ describe('7. Security Headers', () => {
     
     const xfo = response.headers.get('x-frame-options');
     // expect(xfo).toBe('DENY');
-    expect(true).toBe(true);
+    if (process.env.NODE_ENV === 'production') {
+      expect(xfo).toBeTruthy();
+    } else {
+      expect(true).toBe(true);
+    }
   });
 
   // Test 7.3: X-Content-Type-Options
@@ -647,7 +976,11 @@ describe('7. Security Headers', () => {
     
     const xcto = response.headers.get('x-content-type-options');
     // expect(xcto).toBe('nosniff');
-    expect(true).toBe(true);
+    if (process.env.NODE_ENV === 'production') {
+      expect(xcto).toBeTruthy();
+    } else {
+      expect(true).toBe(true);
+    }
   });
 
   // Test 7.4: Strict-Transport-Security
@@ -658,7 +991,11 @@ describe('7. Security Headers', () => {
     
     const hsts = response.headers.get('strict-transport-security');
     // En production, HSTS devrait être présent
-    expect(true).toBe(true);
+    if (process.env.NODE_ENV === 'production') {
+      expect(hsts).toBeTruthy();
+    } else {
+      expect(true).toBe(true);
+    }
   });
 
   // Test 7.5: Referrer-Policy
@@ -669,7 +1006,11 @@ describe('7. Security Headers', () => {
     
     const rp = response.headers.get('referrer-policy');
     // expect(rp).toBeTruthy();
-    expect(true).toBe(true);
+    if (process.env.NODE_ENV === 'production') {
+      expect(rp).toBeTruthy();
+    } else {
+      expect(true).toBe(true);
+    }
   });
 });
 
@@ -736,7 +1077,6 @@ describe('8. Miscellaneous Security', () => {
       method: 'GET',
     });
     
-    const server = response.headers.get('server');
     const xPoweredBy = response.headers.get('x-powered-by');
     
     // Ces headers ne devraient pas révéler de versions

@@ -42,6 +42,29 @@ export async function POST(request: NextRequest) {
     // ÉTAPE 3: Traiter l'événement selon son type
     const supabase = createSupabaseAdminClient()
 
+    // ÉTAPE 3.5: Idempotence webhook (éviter double traitement)
+    const { error: eventInsertError } = await supabase
+      .from('stripe_events')
+      .insert({
+        event_id: event.id,
+        event_type: event.type,
+        payload: event as unknown as Record<string, unknown>,
+        status: 'received',
+      })
+
+    if (eventInsertError) {
+      // 23505 = duplicate key
+      if ((eventInsertError as { code?: string }).code === '23505') {
+        console.log(`Webhook duplicate ignored: ${event.id}`)
+        return NextResponse.json({ received: true })
+      }
+      console.error('Webhook event log error:', eventInsertError)
+      return NextResponse.json(
+        { error: 'Webhook event log failed' },
+        { status: 500 }
+      )
+    }
+
     switch (event.type) {
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent
@@ -67,6 +90,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Toujours retourner 200 pour confirmer la réception
+    await supabase
+      .from('stripe_events')
+      .update({ status: 'processed', processed_at: new Date().toISOString() })
+      .eq('event_id', event.id)
+
     return NextResponse.json({ received: true })
 
   } catch (error) {
@@ -88,8 +116,6 @@ async function handlePaymentSuccess(
   eventId: string
 ) {
   const orderId = paymentIntent.metadata.order_id
-  const projectId = paymentIntent.metadata.project_id
-
   if (!orderId) {
     console.error('Payment success: Missing order_id in metadata')
     return
@@ -98,7 +124,7 @@ async function handlePaymentSuccess(
   // Récupérer la commande
   const { data: order, error: fetchError } = await supabase
     .from('orders')
-    .select('id, status, amount_gross')
+    .select('id, status, amount, user_id, project_id')
     .eq('id', orderId)
     .single()
 
@@ -108,13 +134,13 @@ async function handlePaymentSuccess(
   }
 
   // ⚠️ IDEMPOTENCY: Si déjà complété, ne rien faire
-  if (order.status === 'completed') {
-    console.log('Payment success: Order already completed', orderId)
+  if (order.status === 'paid') {
+    console.log('Payment success: Order already paid', orderId)
     return
   }
 
   // ⚠️ CRITICAL: Vérifier que le montant correspond
-  const expectedAmount = Math.round(order.amount_gross * 100)
+  const expectedAmount = Math.round(order.amount * 100)
   if (paymentIntent.amount !== expectedAmount) {
     console.error(
       `Payment success: Amount mismatch. Expected ${expectedAmount}, got ${paymentIntent.amount}`,
@@ -135,15 +161,33 @@ async function handlePaymentSuccess(
   const { error: updateError } = await supabase
     .from('orders')
     .update({
-      status: 'completed',
+      status: 'paid',
       stripe_charge_id: paymentIntent.latest_charge as string,
-      completed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq('id', orderId)
 
   if (updateError) {
     console.error('Payment success: Failed to update order', updateError)
     return
+  }
+
+  // Créer l'accès achat (source de vérité)
+  const { error: purchaseError } = await supabase
+    .from('purchases')
+    .upsert(
+      {
+        user_id: order.user_id,
+        project_id: order.project_id,
+        order_id: order.id,
+      },
+      {
+        onConflict: 'user_id,project_id',
+      }
+    )
+
+  if (purchaseError) {
+    console.error('Payment success: Failed to create purchase', purchaseError)
   }
 
   // Logger l'action d'audit
@@ -154,13 +198,13 @@ async function handlePaymentSuccess(
     resource_id: orderId,
     old_values: { status: order.status },
     new_values: {
-      status: 'completed',
+      status: 'paid',
       payment_intent: paymentIntent.id,
       event_id: eventId,
     },
   })
 
-  console.log('Payment success: Order completed', orderId)
+  console.log('Payment success: Order paid', orderId)
 }
 
 async function handlePaymentFailed(
@@ -178,9 +222,9 @@ async function handlePaymentFailed(
   // Mettre à jour le statut de la commande
   const { error: updateError } = await supabase
     .from('orders')
-    .update({ status: 'failed' })
+    .update({ status: 'failed', updated_at: new Date().toISOString() })
     .eq('id', orderId)
-    .neq('status', 'completed') // Ne pas écraser un paiement réussi
+    .neq('status', 'paid') // Ne pas écraser un paiement réussi
 
   if (updateError) {
     console.error('Payment failed: Failed to update order', updateError)
@@ -210,11 +254,20 @@ async function handleRefund(
   charge: Stripe.Charge,
   eventId: string
 ) {
-  // Trouver la commande par charge_id
+  const paymentIntentId = typeof charge.payment_intent === 'string'
+    ? charge.payment_intent
+    : charge.payment_intent?.id
+
+  if (!paymentIntentId) {
+    console.error('Refund: Missing payment_intent on charge', charge.id)
+    return
+  }
+
+  // Trouver la commande par payment_intent
   const { data: order, error: fetchError } = await supabase
     .from('orders')
-    .select('id, status')
-    .eq('stripe_charge_id', charge.id)
+    .select('id, status, user_id, project_id')
+    .eq('stripe_payment_intent_id', paymentIntentId)
     .single()
 
   if (fetchError || !order) {
@@ -227,13 +280,23 @@ async function handleRefund(
     .from('orders')
     .update({
       status: 'refunded',
-      refunded_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     })
     .eq('id', order.id)
 
   if (updateError) {
     console.error('Refund: Failed to update order', updateError)
     return
+  }
+
+  // Retirer l'accès achat (source de vérité)
+  const { error: revokeError } = await supabase
+    .from('purchases')
+    .delete()
+    .eq('order_id', order.id)
+
+  if (revokeError) {
+    console.error('Refund: Failed to revoke purchase', revokeError)
   }
 
   // Logger l'action d'audit
@@ -245,7 +308,7 @@ async function handleRefund(
     old_values: { status: order.status },
     new_values: {
       status: 'refunded',
-      charge_id: charge.id,
+      payment_intent: paymentIntentId,
       event_id: eventId,
     },
   })

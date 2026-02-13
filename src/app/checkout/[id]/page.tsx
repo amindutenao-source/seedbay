@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 
@@ -22,6 +21,7 @@ export default function CheckoutPage({ params }: Props) {
   const [orderData, setOrderData] = useState<{
     order_id: string
     project_title: string
+    project_slug: string
     amount: number
   } | null>(null)
   const [error, setError] = useState('')
@@ -48,6 +48,7 @@ export default function CheckoutPage({ params }: Props) {
         setOrderData({
           order_id: data.order_id,
           project_title: data.project_title,
+          project_slug: data.project_slug,
           amount: data.amount,
         })
       } catch (err) {
@@ -79,7 +80,7 @@ export default function CheckoutPage({ params }: Props) {
           <h2 className="text-2xl font-bold text-white mb-4">Erreur</h2>
           <p className="text-gray-400 mb-6">{error}</p>
           <Link 
-            href={`/projects/${params.id}`}
+            href={orderData?.project_slug ? `/projects/${orderData.project_slug}` : `/marketplace`}
             className="text-blue-400 hover:text-blue-300"
           >
             Retour au projet
@@ -150,7 +151,6 @@ export default function CheckoutPage({ params }: Props) {
 function CheckoutForm({ projectId }: { projectId: string }) {
   const stripe = useStripe()
   const elements = useElements()
-  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 

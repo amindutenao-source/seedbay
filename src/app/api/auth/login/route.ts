@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase'
 import { LoginSchema, logAudit, badRequestResponse, serverErrorResponse, successResponse, unauthorizedResponse } from '@/lib/auth'
 

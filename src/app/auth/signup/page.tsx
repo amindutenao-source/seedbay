@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 
 // ============================================================================
 // PAGE: /auth/signup
@@ -10,7 +10,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 // ============================================================================
 
 export default function SignupPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const defaultRole = searchParams.get('role') === 'vendor' ? 'vendor' : 'buyer'
 
