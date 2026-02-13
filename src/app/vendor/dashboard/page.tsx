@@ -70,7 +70,11 @@ export default function VendorDashboard() {
 
         // Calculer les stats
         const salesByProject = new Map<string, { count: number; revenue: number }>()
-        purchasesData?.forEach(purchase => {
+        const purchases = (purchasesData ?? []) as Array<{
+          project_id: string
+          order: { amount: number } | null
+        }>
+        purchases.forEach(purchase => {
           const existing = salesByProject.get(purchase.project_id) || { count: 0, revenue: 0 }
           salesByProject.set(purchase.project_id, {
             count: existing.count + 1,
