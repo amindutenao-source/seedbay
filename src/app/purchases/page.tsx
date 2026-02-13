@@ -86,14 +86,16 @@ export default function PurchasesPage() {
     setDownloadingId(orderId)
     try {
       // Récupérer les fichiers de la commande
-      const { data: files, error: filesError } = await supabase
+      const { data: filesData, error: filesError } = await supabase
         .from('deliverables')
         .select('id')
         .eq('order_id', orderId)
 
       if (filesError) throw filesError
 
-      if (!files || files.length === 0) {
+      const files = (filesData ?? []) as Array<{ id: string }>
+
+      if (files.length === 0) {
         alert('No files available for download')
         return
       }
