@@ -2,14 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-
-// ============================================================================
-// PAGE: /auth/signup
-// Inscription d'un nouvel utilisateur
-// ============================================================================
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function SignupPage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const defaultRole = searchParams.get('role') === 'vendor' ? 'vendor' : 'buyer'
 
@@ -30,15 +26,8 @@ export default function SignupPage() {
     setError('')
     setLoading(true)
 
-    // Validation côté client
     if (formData.password !== formData.confirmPassword) {
       setError('Les mots de passe ne correspondent pas')
-      setLoading(false)
-      return
-    }
-
-    if (formData.password.length < 12) {
-      setError('Le mot de passe doit contenir au moins 12 caractères')
       setLoading(false)
       return
     }
@@ -57,14 +46,13 @@ export default function SignupPage() {
       })
 
       const data = await response.json()
-
       if (!response.ok) {
-        setError(data.error || 'Erreur lors de l\'inscription')
+        setError(data.error || "Erreur lors de l'inscription")
         return
       }
 
       setSuccess(true)
-    } catch (err) {
+    } catch {
       setError('Erreur de connexion au serveur')
     } finally {
       setLoading(false)
@@ -75,15 +63,17 @@ export default function SignupPage() {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
         <div className="max-w-md w-full bg-white/5 rounded-xl p-8 border border-white/10 text-center">
-          <div className="text-5xl mb-4">✉️</div>
           <h2 className="text-2xl font-bold text-white mb-4">Vérifiez votre email</h2>
           <p className="text-gray-400 mb-6">
-            Un email de confirmation a été envoyé à <strong className="text-white">{formData.email}</strong>.
-            Cliquez sur le lien pour activer votre compte.
+            Un email de confirmation a été envoyé à{' '}
+            <strong className="text-white">{formData.email}</strong>.
           </p>
-          <Link href="/auth/login" className="text-blue-400 hover:text-blue-300">
+          <button
+            onClick={() => router.push('/auth/login')}
+            className="text-blue-400 hover:text-blue-300"
+          >
             Retour à la connexion
-          </Link>
+          </button>
         </div>
       </div>
     )
@@ -92,12 +82,10 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
       <div className="max-w-md w-full">
-        {/* Logo */}
-        <Link href="/" className="block text-center mb-8">
-          <span className="text-3xl font-bold text-white">🚀 SeedBay</span>
+        <Link href="/" className="block text-center mb-8 text-3xl font-bold text-white">
+          SeedBay
         </Link>
 
-        {/* Form Card */}
         <div className="bg-white/5 rounded-xl p-8 border border-white/10">
           <h1 className="text-2xl font-bold text-white mb-6">Créer un compte</h1>
 
@@ -108,7 +96,6 @@ export default function SignupPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Role Selection */}
             <div>
               <label className="block text-sm text-gray-400 mb-2">Je veux</label>
               <div className="grid grid-cols-2 gap-3">
@@ -121,7 +108,6 @@ export default function SignupPage() {
                       : 'border-white/20 text-gray-400 hover:border-white/40'
                   }`}
                 >
-                  <span className="block text-xl mb-1">🛒</span>
                   Acheter
                 </button>
                 <button
@@ -133,13 +119,11 @@ export default function SignupPage() {
                       : 'border-white/20 text-gray-400 hover:border-white/40'
                   }`}
                 >
-                  <span className="block text-xl mb-1">💰</span>
                   Vendre
                 </button>
               </div>
             </div>
 
-            {/* Email */}
             <div>
               <label htmlFor="email" className="block text-sm text-gray-400 mb-2">
                 Email
@@ -155,10 +139,9 @@ export default function SignupPage() {
               />
             </div>
 
-            {/* Username */}
             <div>
               <label htmlFor="username" className="block text-sm text-gray-400 mb-2">
-                Nom d&apos;utilisateur
+                Nom d'utilisateur
               </label>
               <input
                 type="text"
@@ -171,10 +154,9 @@ export default function SignupPage() {
               />
             </div>
 
-            {/* Full Name (optional) */}
             <div>
               <label htmlFor="full_name" className="block text-sm text-gray-400 mb-2">
-                Nom complet <span className="text-gray-600">(optionnel)</span>
+                Nom complet (optionnel)
               </label>
               <input
                 type="text"
@@ -186,7 +168,6 @@ export default function SignupPage() {
               />
             </div>
 
-            {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm text-gray-400 mb-2">
                 Mot de passe
@@ -205,7 +186,6 @@ export default function SignupPage() {
               </p>
             </div>
 
-            {/* Confirm Password */}
             <div>
               <label htmlFor="confirmPassword" className="block text-sm text-gray-400 mb-2">
                 Confirmer le mot de passe
@@ -221,7 +201,6 @@ export default function SignupPage() {
               />
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
@@ -231,7 +210,6 @@ export default function SignupPage() {
             </button>
           </form>
 
-          {/* Login Link */}
           <p className="text-center text-gray-400 mt-6">
             Déjà un compte ?{' '}
             <Link href="/auth/login" className="text-blue-400 hover:text-blue-300">

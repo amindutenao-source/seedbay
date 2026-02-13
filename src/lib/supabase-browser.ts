@@ -1,12 +1,35 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createBrowserClient as createSsrBrowserClient, serialize } from '@supabase/ssr'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/lib/supabase-types'
 
+function getCookie(name: string) {
+  if (typeof document === 'undefined') return undefined
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'))
+  return match ? decodeURIComponent(match[1]) : undefined
+}
+
 // ============================================================================
-// CLIENT BROWSER (pour composants client)
+// CLIENT BROWSER (session basée sur cookies)
 // ============================================================================
 export function createBrowserClient(): SupabaseClient<Database> {
-  return createClient<Database>(
+  return createSsrBrowserClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(key) {
+          return getCookie(key)
+        },
+        set(key, value, options) {
+          if (typeof document === 'undefined') return
+          document.cookie = serialize(key, value, { path: '/', ...options })
+        },
+        remove(key, options) {
+          if (typeof document === 'undefined') return
+          document.cookie = serialize(key, '', { path: '/', ...options, maxAge: 0 })
+        },
+      },
+      isSingleton: true,
+    }
   )
 }

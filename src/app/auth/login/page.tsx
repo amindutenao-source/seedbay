@@ -2,22 +2,12 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
-
-// ============================================================================
-// PAGE: /auth/login
-// Connexion d'un utilisateur existant
-// ============================================================================
+import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const redirect = searchParams.get('redirect') || '/dashboard'
-
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-  })
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -30,20 +20,17 @@ export default function LoginPage() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ email, password }),
       })
 
       const data = await response.json()
-
       if (!response.ok) {
-        setError(data.error || 'Erreur lors de la connexion')
+        setError(data.error || 'Email ou mot de passe incorrect')
         return
       }
 
-      // Rediriger vers la page demandée ou le dashboard
-      router.push(redirect)
-      router.refresh()
-    } catch (err) {
+      router.push('/marketplace')
+    } catch {
       setError('Erreur de connexion au serveur')
     } finally {
       setLoading(false)
@@ -53,12 +40,10 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
       <div className="max-w-md w-full">
-        {/* Logo */}
-        <Link href="/" className="block text-center mb-8">
-          <span className="text-3xl font-bold text-white">🚀 SeedBay</span>
+        <Link href="/" className="block text-center mb-8 text-3xl font-bold text-white">
+          SeedBay
         </Link>
 
-        {/* Form Card */}
         <div className="bg-white/5 rounded-xl p-8 border border-white/10">
           <h1 className="text-2xl font-bold text-white mb-6">Connexion</h1>
 
@@ -69,7 +54,6 @@ export default function LoginPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Email */}
             <div>
               <label htmlFor="email" className="block text-sm text-gray-400 mb-2">
                 Email
@@ -78,14 +62,13 @@ export default function LoginPage() {
                 type="email"
                 id="email"
                 required
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
                 placeholder="vous@exemple.com"
               />
             </div>
 
-            {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm text-gray-400 mb-2">
                 Mot de passe
@@ -94,21 +77,13 @@ export default function LoginPage() {
                 type="password"
                 id="password"
                 required
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
                 placeholder="••••••••••••"
               />
             </div>
 
-            {/* Forgot Password */}
-            <div className="text-right">
-              <Link href="/auth/forgot-password" className="text-sm text-blue-400 hover:text-blue-300">
-                Mot de passe oublié ?
-              </Link>
-            </div>
-
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
@@ -118,11 +93,10 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Signup Link */}
           <p className="text-center text-gray-400 mt-6">
             Pas encore de compte ?{' '}
             <Link href="/auth/signup" className="text-blue-400 hover:text-blue-300">
-              S&apos;inscrire
+              Créer un compte
             </Link>
           </p>
         </div>
