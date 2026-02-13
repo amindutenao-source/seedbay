@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
-import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase'
+import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase-server'
 
 export const downloadRequestSchema = z.object({
   deliverable_id: z.string().uuid(),
@@ -156,7 +156,7 @@ export async function resolveDownload(
 function normalizeStoragePath(urlOrPath: string, bucket: string): string | null {
   if (!urlOrPath) return null
   if (!urlOrPath.includes('://')) {
-    return urlOrPath.replace(/^\\/+/, '')
+    return urlOrPath.replace(/^\/+/, '')
   }
   try {
     const u = new URL(urlOrPath)

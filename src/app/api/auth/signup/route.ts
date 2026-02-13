@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase'
+import { createSupabaseServerClient, createSupabaseAdminClient } from '@/lib/supabase-server'
 import { SignupSchema, logAudit, badRequestResponse, serverErrorResponse, successResponse } from '@/lib/auth'
 
 // ============================================================================

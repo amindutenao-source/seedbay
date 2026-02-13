@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { createSupabaseAdminClient } from '@/lib/supabase'
+import { createSupabaseAdminClient } from '@/lib/supabase-server'
 import {
   requireAdmin,
   unauthorizedResponse,
@@ -12,6 +12,8 @@ import {
 // GET /api/admin/users
 // Liste des utilisateurs (admin only)
 // ============================================================================
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   const authResult = await requireAdmin(request)

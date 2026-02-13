@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient, createSupabaseAdminClient } from './supabase'
+import { createSupabaseServerClient, createSupabaseAdminClient } from './supabase-server'
 import { z } from 'zod'
 
 // ============================================================================

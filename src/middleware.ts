@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 // Middleware simplifié pour le développement
-export async function middleware(request: NextRequest) {
+export async function middleware(_request: NextRequest) {
   const response = NextResponse.next()
   
   // Headers de sécurité

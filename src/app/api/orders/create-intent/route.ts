@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { randomUUID } from 'crypto'
-import { createSupabaseServerClient } from '@/lib/supabase'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 import Stripe from 'stripe'
 import {
   requireAuth,
