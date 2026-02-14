@@ -25,7 +25,7 @@ export interface AuthResult {
 // ============================================================================
 
 export const SignupSchema = z.object({
-  email: z.string().email('Email invalide'),
+  email: z.string().trim().email('Email invalide'),
   password: z
     .string()
     .min(12, 'Le mot de passe doit contenir au moins 12 caractères')
@@ -35,9 +35,10 @@ export const SignupSchema = z.object({
     .regex(/[^A-Za-z0-9]/, 'Le mot de passe doit contenir au moins un caractère spécial'),
   username: z
     .string()
+    .trim()
     .min(3, 'Le nom d\'utilisateur doit contenir au moins 3 caractères')
     .max(30, 'Le nom d\'utilisateur ne peut pas dépasser 30 caractères')
-    .regex(/^[a-zA-Z0-9_]+$/, 'Le nom d\'utilisateur ne peut contenir que des lettres, chiffres et underscores'),
+    .regex(/^[a-zA-Z0-9_.-]+$/, 'Le nom d\'utilisateur ne peut contenir que des lettres, chiffres, underscores, points et tirets'),
   role: z.enum(['buyer', 'vendor']).default('buyer'),
   full_name: z.string().optional(),
 })
