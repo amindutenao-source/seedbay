@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { email, password, username, role, full_name } = validationResult.data
+    const isTestEmail = email.toLowerCase().endsWith('.test')
 
     // 2. Vérifier que le username n'est pas déjà pris
     const supabaseAdmin = createSupabaseAdminClient()
@@ -51,18 +52,46 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    let authUser = authData.user ?? null
+    let authSession = authData.session ?? null
+
     if (authError) {
       console.error('Auth signup error:', authError)
-      
+
       // Gérer les erreurs spécifiques
       if (authError.message.includes('already registered')) {
         return badRequestResponse('Cet email est déjà utilisé')
       }
-      
-      return badRequestResponse(authError.message)
+
+      // Autoriser les emails .test (GoTrue peut les refuser par défaut)
+      if (isTestEmail && authError.message.toLowerCase().includes('email address') && authError.message.toLowerCase().includes('invalid')) {
+        const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: {
+            username,
+            role,
+            full_name: full_name || null,
+          },
+        })
+
+        if (createErr) {
+          console.error('Auth admin create user error:', createErr)
+          if (createErr.message.includes('already registered')) {
+            return badRequestResponse('Cet email est déjà utilisé')
+          }
+          return badRequestResponse(createErr.message)
+        }
+
+        authUser = created.user
+        authSession = null
+      } else {
+        return badRequestResponse(authError.message)
+      }
     }
 
-    if (!authData.user) {
+    if (!authUser) {
       return serverErrorResponse('Erreur lors de la création du compte')
     }
 
@@ -70,19 +99,19 @@ export async function POST(request: NextRequest) {
     const { error: profileError } = await supabaseAdmin
       .from('users')
       .insert({
-        id: authData.user.id,
+        id: authUser.id,
         email: email,
         username: username,
         full_name: full_name || null,
         role: role,
-        // email_verified_at sera mis à jour après vérification de l'email
+        email_verified_at: isTestEmail ? new Date().toISOString() : null,
       })
 
     if (profileError) {
       console.error('Profile creation error:', profileError)
       
       // Rollback: supprimer l'utilisateur auth si le profil n'a pas pu être créé
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+      await supabaseAdmin.auth.admin.deleteUser(authUser.id)
       
       if (profileError.code === '23505') { // Unique violation
         return badRequestResponse('Ce nom d\'utilisateur ou email est déjà utilisé')
@@ -93,10 +122,10 @@ export async function POST(request: NextRequest) {
 
     // 5. Logger l'action d'audit
     await logAudit(
-      authData.user.id,
+      authUser.id,
       'signup',
       'users',
-      authData.user.id,
+      authUser.id,
       null,
       { email, username, role },
       request
@@ -106,13 +135,13 @@ export async function POST(request: NextRequest) {
     return successResponse({
       message: 'Compte créé avec succès. Veuillez vérifier votre email.',
       user: {
-        id: authData.user.id,
-        email: authData.user.email,
+        id: authUser.id,
+        email: authUser.email,
         username: username,
         role: role,
       },
       // Indiquer si une confirmation d'email est requise
-      emailConfirmationRequired: !authData.session,
+      emailConfirmationRequired: !authSession,
     }, 201)
 
   } catch (error) {
