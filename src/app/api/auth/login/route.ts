@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabase-server'
 import { LoginSchema, logAudit, badRequestResponse, serverErrorResponse, successResponse, unauthorizedResponse } from '@/lib/auth'
+import { buildRateLimitHeaders, checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 // ============================================================================
 // POST /api/auth/login
@@ -9,6 +10,29 @@ import { LoginSchema, logAudit, badRequestResponse, serverErrorResponse, success
 
 export async function POST(request: NextRequest) {
   try {
+    const clientIp = getClientIp(request)
+    const rate = checkRateLimit(`login:${clientIp}`, 10, 5 * 60 * 1000)
+    if (!rate.allowed) {
+      await logAudit(
+        null,
+        'rate_limited',
+        'auth',
+        null,
+        null,
+        { route: '/api/auth/login', ip: clientIp },
+        request
+      )
+      return new Response(
+        JSON.stringify({ error: 'Too many requests, please try again later.' }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            ...buildRateLimitHeaders(rate),
+          },
+        }
+      )
+    }
     // 1. Parser et valider le body
     let body: unknown
     try {

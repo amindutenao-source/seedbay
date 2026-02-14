@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { z } from 'zod'
 import { createSupabaseAdminClient, createSupabaseServerClient } from '@/lib/supabase-server'
+import { logAudit } from '@/lib/auth'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export const downloadRequestSchema = z.object({
   deliverable_id: z.string().uuid(),
@@ -28,6 +30,23 @@ export async function resolveDownload(
     }
   }
 
+  const rate = checkRateLimit(`download:user:${user.id}`, 30, 5 * 60 * 1000)
+  if (!rate.allowed) {
+    await logAudit(
+      user.id,
+      'rate_limited',
+      'downloads',
+      deliverableId,
+      null,
+      { route: '/api/files/download' },
+      request
+    )
+    return {
+      status: 429,
+      body: { error: 'Too many download requests, please try again later.' },
+    }
+  }
+
   const { data: deliverable, error: deliverableError } = await supabase
     .from('deliverables')
     .select(`
@@ -46,6 +65,13 @@ export async function resolveDownload(
     }
   }
 
+  if (!deliverable.delivered_at) {
+    return {
+      status: 403,
+      body: { error: 'Deliverable not ready' },
+    }
+  }
+
   if (orderId && deliverable.order_id !== orderId) {
     return {
       status: 400,
@@ -58,6 +84,7 @@ export async function resolveDownload(
     .select(`
       id,
       user_id,
+      status,
       project:projects!project_id (
         id,
         status,
@@ -78,6 +105,13 @@ export async function resolveDownload(
     return {
       status: 403,
       body: { error: 'Access denied' },
+    }
+  }
+
+  if (order.status !== 'paid') {
+    return {
+      status: 403,
+      body: { error: 'Payment required' },
     }
   }
 

@@ -124,7 +124,7 @@ async function handlePaymentSuccess(
   // Récupérer la commande
   const { data: order, error: fetchError } = await supabase
     .from('orders')
-    .select('id, status, amount, user_id, project_id')
+    .select('id, status, amount, user_id, project_id, stripe_payment_intent_id, currency')
     .eq('id', orderId)
     .single()
 
@@ -139,11 +139,51 @@ async function handlePaymentSuccess(
     return
   }
 
+  if (order.stripe_payment_intent_id !== paymentIntent.id) {
+    console.error(
+      'Payment success: PaymentIntent mismatch',
+      orderId,
+      paymentIntent.id
+    )
+    await supabase.from('audit_logs').insert({
+      user_id: null,
+      action: 'payment_intent_mismatch',
+      resource_type: 'orders',
+      resource_id: orderId,
+      old_values: { payment_intent: order.stripe_payment_intent_id },
+      new_values: { received: paymentIntent.id },
+    })
+    return
+  }
+
+  if (
+    order.currency &&
+    paymentIntent.currency &&
+    order.currency.toLowerCase() !== paymentIntent.currency.toLowerCase()
+  ) {
+    console.error(
+      'Payment success: Currency mismatch',
+      orderId,
+      order.currency,
+      paymentIntent.currency
+    )
+    await supabase.from('audit_logs').insert({
+      user_id: null,
+      action: 'payment_currency_mismatch',
+      resource_type: 'orders',
+      resource_id: orderId,
+      old_values: { currency: order.currency },
+      new_values: { received: paymentIntent.currency },
+    })
+    return
+  }
+
   // ⚠️ CRITICAL: Vérifier que le montant correspond
   const expectedAmount = Math.round(order.amount * 100)
-  if (paymentIntent.amount !== expectedAmount) {
+  const receivedAmount = paymentIntent.amount_received ?? paymentIntent.amount
+  if (receivedAmount !== expectedAmount) {
     console.error(
-      `Payment success: Amount mismatch. Expected ${expectedAmount}, got ${paymentIntent.amount}`,
+      `Payment success: Amount mismatch. Expected ${expectedAmount}, got ${receivedAmount}`,
       orderId
     )
     // Logger l'anomalie mais ne pas bloquer (pourrait être un problème de devise)
@@ -153,7 +193,7 @@ async function handlePaymentSuccess(
       resource_type: 'orders',
       resource_id: orderId,
       old_values: { expected: expectedAmount },
-      new_values: { received: paymentIntent.amount },
+      new_values: { received: receivedAmount },
     })
   }
 

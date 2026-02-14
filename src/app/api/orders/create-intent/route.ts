@@ -14,6 +14,7 @@ import {
   unauthorizedResponse,
   forbiddenResponse,
 } from '@/lib/auth'
+import { buildRateLimitHeaders, checkRateLimit, getClientIp } from '@/lib/rate-limit'
 
 // ============================================================================
 // POST /api/orders/create-intent
@@ -27,12 +28,59 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 
 export async function POST(request: NextRequest) {
   try {
+    const clientIp = getClientIp(request)
+    const ipRate = checkRateLimit(`order:ip:${clientIp}`, 30, 10 * 60 * 1000)
+    if (!ipRate.allowed) {
+      await logAudit(
+        null,
+        'rate_limited',
+        'orders',
+        null,
+        null,
+        { route: '/api/orders/create-intent', ip: clientIp },
+        request
+      )
+      return new Response(
+        JSON.stringify({ error: 'Too many requests, please try again later.' }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            ...buildRateLimitHeaders(ipRate),
+          },
+        }
+      )
+    }
+
     // ÉTAPE 1: Vérifier l'authentification
     const authResult = await requireAuth(request)
     if (!authResult.success) {
       return unauthorizedResponse(authResult.error!)
     }
     const userId = authResult.user!.id
+
+    const userRate = checkRateLimit(`order:user:${userId}`, 8, 10 * 60 * 1000)
+    if (!userRate.allowed) {
+      await logAudit(
+        userId,
+        'rate_limited',
+        'orders',
+        null,
+        null,
+        { route: '/api/orders/create-intent', ip: clientIp },
+        request
+      )
+      return new Response(
+        JSON.stringify({ error: 'Too many requests, please try again later.' }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            ...buildRateLimitHeaders(userRate),
+          },
+        }
+      )
+    }
 
     // ÉTAPE 2: Vérifier que l'email est vérifié
     const emailResult = await requireEmailVerified(request)
@@ -64,6 +112,10 @@ export async function POST(request: NextRequest) {
 
     if (projectError || !project) {
       return notFoundResponse('Projet non trouvé ou non disponible')
+    }
+
+    if (project.price <= 0) {
+      return badRequestResponse('Projet invalide: prix incorrect')
     }
 
     // ÉTAPE 5: Vérifier qu'il n'y a pas d'achat précédent
@@ -116,6 +168,9 @@ export async function POST(request: NextRequest) {
 
     if (orderError || !order) {
       console.error('Order creation error:', orderError)
+      if ((orderError as { code?: string })?.code === '23505') {
+        return badRequestResponse('Une commande existe déjà pour ce projet')
+      }
       return serverErrorResponse('Erreur lors de la création de la commande')
     }
 

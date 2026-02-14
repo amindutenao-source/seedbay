@@ -79,6 +79,102 @@ const adminClient = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
     })
   : null
 
+const TEST_PASSWORD = 'SecurePass123!'
+
+async function createTestUser(role: 'buyer' | 'vendor') {
+  if (!adminClient) {
+    throw new Error('adminClient unavailable')
+  }
+  const email = `seedbay-${role}-${Date.now()}-${Math.floor(Math.random() * 1000)}@example.com`
+  const username = `user_${randomUUID().slice(0, 8)}`
+  const { data, error } = await adminClient.auth.admin.createUser({
+    email,
+    password: TEST_PASSWORD,
+    email_confirm: true,
+  })
+  if (error || !data.user) {
+    throw new Error(`Failed to create auth user: ${error?.message}`)
+  }
+
+  await adminClient.from('users').insert({
+    id: data.user.id,
+    email,
+    username,
+    role,
+    email_verified_at: new Date().toISOString(),
+  })
+
+  return { id: data.user.id, email, username }
+}
+
+async function createTestProject(sellerId: string) {
+  if (!adminClient) {
+    throw new Error('adminClient unavailable')
+  }
+  const slug = `project-${randomUUID().slice(0, 8)}`
+  const { data, error } = await adminClient
+    .from('projects')
+    .insert({
+      seller_id: sellerId,
+      title: 'Seedbay Test Project',
+      slug,
+      description: 'Test project description',
+      problem: 'Test problem',
+      solution: 'Test solution',
+      maturity_level: 'mvp',
+      tech_stack: ['Next.js', 'Supabase'],
+      license_type: 'exclusive',
+      category: 'saas',
+      price: 49,
+      currency: 'USD',
+      status: 'published',
+    })
+    .select('id')
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to create project: ${error?.message}`)
+  }
+
+  return { id: data.id }
+}
+
+async function cleanupTestData(params: {
+  deliverableIds?: string[]
+  purchaseIds?: string[]
+  orderIds?: string[]
+  projectIds?: string[]
+  userIds?: string[]
+}) {
+  if (!adminClient) return
+  const {
+    deliverableIds = [],
+    purchaseIds = [],
+    orderIds = [],
+    projectIds = [],
+    userIds = [],
+  } = params
+
+  if (deliverableIds.length) {
+    await adminClient.from('deliverables').delete().in('id', deliverableIds)
+  }
+  if (purchaseIds.length) {
+    await adminClient.from('purchases').delete().in('id', purchaseIds)
+  }
+  if (orderIds.length) {
+    await adminClient.from('orders').delete().in('id', orderIds)
+  }
+  if (projectIds.length) {
+    await adminClient.from('projects').delete().in('id', projectIds)
+  }
+  if (userIds.length) {
+    await adminClient.from('users').delete().in('id', userIds)
+    await Promise.all(
+      userIds.map((id) => adminClient.auth.admin.deleteUser(id))
+    )
+  }
+}
+
 async function loginAndGetCookie(email: string, password: string) {
   const response = await fetchAPI('/api/auth/login', {
     method: 'POST',
@@ -638,6 +734,105 @@ describe('3. Payment Security', () => {
     expect(true).toBe(true);
   });
 
+  // Test 3.6b: Webhook idempotent + purchase unique
+  itIfCriticalEnv('3.6b - Webhook should create one purchase only', async () => {
+    if (!adminClient || !STRIPE_WEBHOOK_SECRET || !STRIPE_SECRET_KEY) return
+
+    const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2023-10-16' })
+    const createdUsers: string[] = []
+    const createdProjects: string[] = []
+    const createdOrders: string[] = []
+    const createdPurchases: string[] = []
+
+    try {
+      const seller = await createTestUser('vendor')
+      const buyer = await createTestUser('buyer')
+      createdUsers.push(seller.id, buyer.id)
+
+      const project = await createTestProject(seller.id)
+      createdProjects.push(project.id)
+
+      const paymentIntentId = `pi_${randomUUID().slice(0, 8)}`
+      const { data: order, error: orderErr } = await adminClient
+        .from('orders')
+        .insert({
+          project_id: project.id,
+          user_id: buyer.id,
+          amount: 49,
+          currency: 'USD',
+          stripe_payment_intent_id: paymentIntentId,
+          status: 'pending',
+        })
+        .select('id')
+        .single()
+
+      if (orderErr || !order) {
+        throw new Error(`Failed to create order: ${orderErr?.message}`)
+      }
+      createdOrders.push(order.id)
+
+      const payload = JSON.stringify({
+        id: `evt_${randomUUID().slice(0, 8)}`,
+        object: 'event',
+        type: 'payment_intent.succeeded',
+        data: {
+          object: {
+            id: paymentIntentId,
+            object: 'payment_intent',
+            amount: 4900,
+            amount_received: 4900,
+            currency: 'usd',
+            metadata: {
+              order_id: order.id,
+            },
+          },
+        },
+      })
+
+      const signature = stripe.webhooks.generateTestHeaderString({
+        payload,
+        secret: STRIPE_WEBHOOK_SECRET,
+      })
+
+      const first = await fetch(`${BASE_URL}/api/payments/webhook`, {
+        method: 'POST',
+        headers: {
+          'stripe-signature': signature,
+        },
+        body: payload,
+      })
+
+      const second = await fetch(`${BASE_URL}/api/payments/webhook`, {
+        method: 'POST',
+        headers: {
+          'stripe-signature': signature,
+        },
+        body: payload,
+      })
+
+      expect(first.status).toBe(200)
+      expect(second.status).toBe(200)
+
+      const { data: purchases } = await adminClient
+        .from('purchases')
+        .select('id')
+        .eq('user_id', buyer.id)
+        .eq('project_id', project.id)
+
+      expect(purchases?.length).toBe(1)
+      if (purchases?.[0]?.id) {
+        createdPurchases.push(purchases[0].id)
+      }
+    } finally {
+      await cleanupTestData({
+        purchaseIds: createdPurchases,
+        orderIds: createdOrders,
+        projectIds: createdProjects,
+        userIds: createdUsers,
+      })
+    }
+  });
+
   // Test 3.7: Validation du projet avant paiement
   itIfServer('3.7 - Should validate project exists before payment', async () => {
     // Tenter de créer une commande pour un projet inexistant
@@ -675,6 +870,78 @@ describe('3. Payment Security', () => {
     // (ou toutes devraient être 401 si pas d'auth)
     expect(rateLimited || responses.every(r => [401, 429].includes(r.status))).toBe(true);
   });
+
+  // Test 3.11: Double achat bloqué
+  itIfCriticalEnv('3.11 - Should block duplicate purchase', async () => {
+    if (!adminClient) return
+
+    const createdUsers: string[] = []
+    const createdProjects: string[] = []
+    const createdOrders: string[] = []
+    const createdPurchases: string[] = []
+
+    try {
+      const seller = await createTestUser('vendor')
+      const buyer = await createTestUser('buyer')
+      createdUsers.push(seller.id, buyer.id)
+
+      const project = await createTestProject(seller.id)
+      createdProjects.push(project.id)
+
+      const { data: order, error: orderErr } = await adminClient
+        .from('orders')
+        .insert({
+          project_id: project.id,
+          user_id: buyer.id,
+          amount: 49,
+          currency: 'USD',
+          stripe_payment_intent_id: `pi_${randomUUID().slice(0, 8)}`,
+          status: 'paid',
+        })
+        .select('id')
+        .single()
+
+      if (orderErr || !order) {
+        throw new Error(`Failed to create order: ${orderErr?.message}`)
+      }
+      createdOrders.push(order.id)
+
+      const { data: purchase, error: purchaseErr } = await adminClient
+        .from('purchases')
+        .insert({
+          user_id: buyer.id,
+          project_id: project.id,
+          order_id: order.id,
+        })
+        .select('id')
+        .single()
+
+      if (purchaseErr || !purchase) {
+        throw new Error(`Failed to create purchase: ${purchaseErr?.message}`)
+      }
+      createdPurchases.push(purchase.id)
+
+      const { cookieHeader } = await loginAndGetCookie(buyer.email, TEST_PASSWORD)
+      const response = await fetchAPI('/api/orders/create-intent', {
+        method: 'POST',
+        headers: {
+          Cookie: cookieHeader,
+        },
+        body: JSON.stringify({
+          project_id: project.id,
+        }),
+      })
+
+      expect(response.status).toBe(400)
+    } finally {
+      await cleanupTestData({
+        purchaseIds: createdPurchases,
+        orderIds: createdOrders,
+        projectIds: createdProjects,
+        userIds: createdUsers,
+      })
+    }
+  })
 });
 
 // ============================================================================
@@ -694,6 +961,153 @@ describe('4. File Access Security', () => {
     // Tenter d'accéder aux fichiers d'un projet non acheté
     expect(true).toBe(true);
   });
+
+  // Test 4.2b: Download sans purchase => 403
+  itIfCriticalEnv('4.2b - Download without purchase should fail', async () => {
+    if (!adminClient) return
+
+    const createdUsers: string[] = []
+    const createdProjects: string[] = []
+    const createdOrders: string[] = []
+    const createdDeliverables: string[] = []
+
+    try {
+      const seller = await createTestUser('vendor')
+      const buyer = await createTestUser('buyer')
+      const otherBuyer = await createTestUser('buyer')
+      createdUsers.push(seller.id, buyer.id, otherBuyer.id)
+
+      const project = await createTestProject(seller.id)
+      createdProjects.push(project.id)
+
+      const { data: order, error: orderErr } = await adminClient
+        .from('orders')
+        .insert({
+          project_id: project.id,
+          user_id: otherBuyer.id,
+          amount: 49,
+          currency: 'USD',
+          stripe_payment_intent_id: `pi_${randomUUID().slice(0, 8)}`,
+          status: 'paid',
+        })
+        .select('id')
+        .single()
+
+      if (orderErr || !order) {
+        throw new Error(`Failed to create order: ${orderErr?.message}`)
+      }
+      createdOrders.push(order.id)
+
+      const { data: deliverable, error: deliverableErr } = await adminClient
+        .from('deliverables')
+        .insert({
+          order_id: order.id,
+          url: `deliverables/${project.id}/file.zip`,
+          delivered_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single()
+
+      if (deliverableErr || !deliverable) {
+        throw new Error(`Failed to create deliverable: ${deliverableErr?.message}`)
+      }
+      createdDeliverables.push(deliverable.id)
+
+      const { cookieHeader } = await loginAndGetCookie(buyer.email, TEST_PASSWORD)
+      const response = await fetchAPI('/api/files/download', {
+        method: 'POST',
+        headers: {
+          Cookie: cookieHeader,
+        },
+        body: JSON.stringify({
+          order_id: order.id,
+          deliverable_id: deliverable.id,
+        }),
+      })
+
+      expect(response.status).toBe(403)
+    } finally {
+      await cleanupTestData({
+        deliverableIds: createdDeliverables,
+        orderIds: createdOrders,
+        projectIds: createdProjects,
+        userIds: createdUsers,
+      })
+    }
+  })
+
+  // Test 4.2c: Paiement OK mais access missing => 403
+  itIfCriticalEnv('4.2c - Paid order without purchase should still be blocked', async () => {
+    if (!adminClient) return
+
+    const createdUsers: string[] = []
+    const createdProjects: string[] = []
+    const createdOrders: string[] = []
+    const createdDeliverables: string[] = []
+
+    try {
+      const seller = await createTestUser('vendor')
+      const buyer = await createTestUser('buyer')
+      createdUsers.push(seller.id, buyer.id)
+
+      const project = await createTestProject(seller.id)
+      createdProjects.push(project.id)
+
+      const { data: order, error: orderErr } = await adminClient
+        .from('orders')
+        .insert({
+          project_id: project.id,
+          user_id: buyer.id,
+          amount: 49,
+          currency: 'USD',
+          stripe_payment_intent_id: `pi_${randomUUID().slice(0, 8)}`,
+          status: 'paid',
+        })
+        .select('id')
+        .single()
+
+      if (orderErr || !order) {
+        throw new Error(`Failed to create order: ${orderErr?.message}`)
+      }
+      createdOrders.push(order.id)
+
+      const { data: deliverable, error: deliverableErr } = await adminClient
+        .from('deliverables')
+        .insert({
+          order_id: order.id,
+          url: `deliverables/${project.id}/file.zip`,
+          delivered_at: new Date().toISOString(),
+        })
+        .select('id')
+        .single()
+
+      if (deliverableErr || !deliverable) {
+        throw new Error(`Failed to create deliverable: ${deliverableErr?.message}`)
+      }
+      createdDeliverables.push(deliverable.id)
+
+      const { cookieHeader } = await loginAndGetCookie(buyer.email, TEST_PASSWORD)
+      const response = await fetchAPI('/api/files/download', {
+        method: 'POST',
+        headers: {
+          Cookie: cookieHeader,
+        },
+        body: JSON.stringify({
+          order_id: order.id,
+          deliverable_id: deliverable.id,
+        }),
+      })
+
+      expect(response.status).toBe(403)
+    } finally {
+      await cleanupTestData({
+        deliverableIds: createdDeliverables,
+        orderIds: createdOrders,
+        projectIds: createdProjects,
+        userIds: createdUsers,
+      })
+    }
+  })
 
   // Test 4.3: Signed URL expiration
   itIfServer('4.3 - Signed URLs should expire', async () => {
