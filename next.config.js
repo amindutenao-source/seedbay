@@ -1,3 +1,5 @@
+const { withSentryConfig } = require('@sentry/nextjs')
+
 /** @type {import('next').NextConfig} */
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 let supabaseHost = null
@@ -61,4 +63,15 @@ const nextConfig = {
   }
 }
 
-module.exports = nextConfig
+const sentryWebpackPluginOptions = {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: true,
+  dryRun: !process.env.SENTRY_AUTH_TOKEN,
+  widenClientFileUpload: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+}
+
+module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions)
