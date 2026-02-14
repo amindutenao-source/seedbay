@@ -83,11 +83,11 @@ export default function VendorDashboard() {
         })
 
         // Enrichir les projets avec les stats de ventes
-        const enrichedProjects: Project[] = projects.map(project => ({
+        const enrichedProjects = projects.map(project => ({
           ...project,
           sales_count: salesByProject.get(project.id)?.count || 0,
           revenue: salesByProject.get(project.id)?.revenue || 0,
-        }))
+        })) as Project[]
 
         setProjects(enrichedProjects)
         setStats({
