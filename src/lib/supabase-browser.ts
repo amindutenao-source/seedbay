@@ -16,14 +16,14 @@ export function createBrowserClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(key) {
+        get(key: string) {
           return getCookie(key)
         },
-        set(key, value, options) {
+        set(key: string, value: string, options: Parameters<typeof serialize>[2]) {
           if (typeof document === 'undefined') return
           document.cookie = serialize(key, value, { path: '/', ...options })
         },
-        remove(key, options) {
+        remove(key: string, options: Parameters<typeof serialize>[2]) {
           if (typeof document === 'undefined') return
           document.cookie = serialize(key, '', { path: '/', ...options, maxAge: 0 })
         },
