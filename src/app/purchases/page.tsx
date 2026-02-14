@@ -12,6 +12,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { createBrowserClient } from '@/lib/supabase-browser'
 
+export const dynamic = 'force-dynamic'
+
 interface Purchase {
   id: string;
   order_id: string;

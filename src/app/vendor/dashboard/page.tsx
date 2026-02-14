@@ -14,6 +14,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { createBrowserClient } from '@/lib/supabase-browser'
 
+export const dynamic = 'force-dynamic'
+
 interface Project {
   id: string;
   title: string;
