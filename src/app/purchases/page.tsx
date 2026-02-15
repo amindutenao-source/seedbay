@@ -7,7 +7,7 @@
 
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { createBrowserClient } from '@/lib/supabase-browser'
@@ -37,11 +37,10 @@ export default function PurchasesPage() {
   const [error, setError] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
-  const supabase = useMemo(() => createBrowserClient(), [])
-
   useEffect(() => {
     async function loadPurchases() {
       try {
+        const supabase = createBrowserClient()
         const { data: { user } } = await supabase.auth.getUser()
         
         if (!user) {
@@ -82,11 +81,12 @@ export default function PurchasesPage() {
     }
 
     loadPurchases()
-  }, [supabase])
+  }, [])
 
   async function handleDownload(orderId: string) {
     setDownloadingId(orderId)
     try {
+      const supabase = createBrowserClient()
       // Récupérer les fichiers de la commande
       const { data: filesData, error: filesError } = await supabase
         .from('deliverables')

@@ -10,7 +10,7 @@
 
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createBrowserClient } from '@/lib/supabase-browser'
 
@@ -39,11 +39,10 @@ export default function VendorDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = useMemo(() => createBrowserClient(), [])
-
   useEffect(() => {
     async function loadDashboard() {
       try {
+        const supabase = createBrowserClient()
         // Vérifier l'authentification
         const { data: { user } } = await supabase.auth.getUser()
         
@@ -107,7 +106,7 @@ export default function VendorDashboard() {
     }
 
     loadDashboard()
-  }, [supabase])
+  }, [])
 
   if (loading) {
     return (
