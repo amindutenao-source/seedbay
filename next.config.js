@@ -71,7 +71,6 @@ const sentryWebpackPluginOptions = {
   dryRun: !process.env.SENTRY_AUTH_TOKEN,
   widenClientFileUpload: true,
   hideSourceMaps: true,
-  disableLogger: true,
 }
 
 module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions)
