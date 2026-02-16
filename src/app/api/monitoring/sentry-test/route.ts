@@ -1,13 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 
-const SECRET = process.env.MONITORING_SECRET
+function normalizeSecret(value: string | null | undefined) {
+  if (!value) return ''
+  const trimmed = value.trim()
+  const unquoted = (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) ? trimmed.slice(1, -1) : trimmed
+
+  return unquoted
+    .replace(/\\n/g, '')
+    .replace(/\r?\n/g, '')
+    .trim()
+}
+
+const SECRET = normalizeSecret(process.env.MONITORING_SECRET)
 
 function isAuthorized(request: NextRequest) {
   if (!SECRET) return false
   const authHeader = request.headers.get('authorization') || ''
   if (!authHeader.startsWith('Bearer ')) return false
-  const token = authHeader.replace('Bearer ', '').trim()
+  const token = normalizeSecret(authHeader.replace('Bearer ', ''))
   return Boolean(token && token === SECRET)
 }
 

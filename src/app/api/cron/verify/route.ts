@@ -2,16 +2,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import * as Sentry from '@sentry/nextjs'
 import { createSupabaseAdminClient } from '@/lib/supabase-server'
 
-const CRON_SECRET = process.env.CRON_SECRET
+function normalizeSecret(value: string | null | undefined) {
+  if (!value) return ''
+  const trimmed = value.trim()
+  const unquoted = (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) ? trimmed.slice(1, -1) : trimmed
+
+  return unquoted
+    .replace(/\\n/g, '')
+    .replace(/\r?\n/g, '')
+    .trim()
+}
+
+const CRON_SECRET = normalizeSecret(process.env.CRON_SECRET)
 
 function isAuthorized(request: NextRequest) {
   const authHeader = request.headers.get('authorization') || ''
   const token = authHeader.startsWith('Bearer ')
-    ? authHeader.replace('Bearer ', '').trim()
+    ? normalizeSecret(authHeader.replace('Bearer ', ''))
     : null
-  const headerSecret = request.headers.get('x-cron-secret')
+  const headerSecret = normalizeSecret(request.headers.get('x-cron-secret'))
   const url = new URL(request.url)
-  const querySecret = url.searchParams.get('secret')
+  const querySecret = normalizeSecret(url.searchParams.get('secret'))
   const provided = token || headerSecret || querySecret
   return Boolean(CRON_SECRET && provided && provided === CRON_SECRET)
 }
