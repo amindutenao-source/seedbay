@@ -24,6 +24,8 @@ src/
 
 ## 🚀 Démarrage Rapide
 
+<!-- Redeploy trigger: 2026-02-16T01:05:15Z -->
+
 ```bash
 # Installation
 npm ci
