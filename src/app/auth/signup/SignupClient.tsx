@@ -208,6 +208,11 @@ export default function SignupClient() {
             >
               {loading ? 'Création...' : 'Créer mon compte'}
             </button>
+
+            <p className="text-xs text-gray-500">
+              En créant un compte, vous acceptez nos <Link href="/legal/cgu" className="text-blue-400 hover:text-blue-300">CGU</Link>,
+              nos <Link href="/legal/cgv" className="text-blue-400 hover:text-blue-300">CGV</Link> et notre <Link href="/legal/privacy" className="text-blue-400 hover:text-blue-300">politique de confidentialité</Link>.
+            </p>
           </form>
 
           <p className="text-center text-gray-400 mt-6">

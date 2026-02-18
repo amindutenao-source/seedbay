@@ -104,19 +104,19 @@ export default async function DashboardPage() {
               <h2 className="text-xl font-semibold text-white mb-4">Vendeur</h2>
               <div className="space-y-3">
                 <Link 
-                  href="/dashboard/projects/new"
+                  href="/vendor/projects/new"
                   className="block bg-green-600 hover:bg-green-700 text-white px-4 py-3 rounded-lg text-center transition"
                 >
                   Créer un projet
                 </Link>
                 <Link 
-                  href="/dashboard/projects"
+                  href="/vendor/dashboard"
                   className="block border border-white/20 hover:border-white/40 text-white px-4 py-3 rounded-lg text-center transition"
                 >
                   Gérer mes projets
                 </Link>
                 <Link 
-                  href="/dashboard/sales"
+                  href="/vendor/dashboard"
                   className="block border border-white/20 hover:border-white/40 text-white px-4 py-3 rounded-lg text-center transition"
                 >
                   Mes ventes

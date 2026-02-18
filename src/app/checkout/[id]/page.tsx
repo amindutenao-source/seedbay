@@ -26,6 +26,8 @@ export default function CheckoutPage({ params }: Props) {
   } | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const normalizedError = error.toLowerCase()
+  const isEmailVerificationError = normalizedError.includes('verifier votre email') || normalizedError.includes('vérifier votre email')
 
   useEffect(() => {
     // Créer le PaymentIntent
@@ -78,7 +80,20 @@ export default function CheckoutPage({ params }: Props) {
         <div className="max-w-md w-full bg-white/5 rounded-xl p-8 border border-white/10 text-center">
           <div className="text-5xl mb-4">⚠️</div>
           <h2 className="text-2xl font-bold text-white mb-4">Erreur</h2>
-          <p className="text-gray-400 mb-6">{error}</p>
+          <p className="text-gray-400 mb-3">{error}</p>
+
+          {isEmailVerificationError && (
+            <div className="text-sm text-gray-300 mb-6">
+              <p className="mb-3">Confirmez votre email via le lien reçu, puis reconnectez-vous pour continuer l&apos;achat.</p>
+              <Link
+                href={`/auth/login?redirect=/checkout/${params.id}`}
+                className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Se reconnecter
+              </Link>
+            </div>
+          )}
+
           <Link 
             href={orderData?.project_slug ? `/projects/${orderData.project_slug}` : `/marketplace`}
             className="text-blue-400 hover:text-blue-300"
@@ -138,10 +153,14 @@ export default function CheckoutPage({ params }: Props) {
           )}
         </div>
 
-        {/* Security Notice */}
-        <p className="text-center text-gray-500 text-sm mt-6">
-          🔒 Paiement sécurisé par Stripe. Vos données sont chiffrées.
-        </p>
+        {/* Security + Legal Notice */}
+        <div className="text-center text-gray-500 text-sm mt-6 space-y-2">
+          <p>🔒 Paiement sécurisé par Stripe. Vos données sont chiffrées.</p>
+          <p>
+            En poursuivant, vous acceptez les <Link href="/legal/cgv" className="text-blue-400 hover:text-blue-300">CGV</Link>
+            {' '}et la <Link href="/legal/privacy" className="text-blue-400 hover:text-blue-300">politique de confidentialité</Link>.
+          </p>
+        </div>
       </main>
     </div>
   )

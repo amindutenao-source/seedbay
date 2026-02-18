@@ -61,6 +61,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <Link href="/" className="text-xl font-bold text-white">SeedBay</Link>
             <div className="flex items-center space-x-4">
               <Link href="/marketplace" className="text-gray-300 hover:text-white">Marketplace</Link>
+              <Link href="/contact" className="text-gray-300 hover:text-white">Contact</Link>
               <Link href="/auth/login" className="text-gray-300 hover:text-white">Connexion</Link>
             </div>
           </div>

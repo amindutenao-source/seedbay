@@ -1,0 +1,18 @@
+export const SITE_INFO = {
+  name: 'SeedBay',
+  appUrl: process.env.NEXT_PUBLIC_APP_URL || 'https://seedbay.vercel.app',
+  supportEmail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@seedbay.app',
+  legalEmail: process.env.NEXT_PUBLIC_LEGAL_EMAIL || 'legal@seedbay.app',
+  contactEmail: process.env.NEXT_PUBLIC_CONTACT_EMAIL || 'contact@seedbay.app',
+  legalEntity: process.env.NEXT_PUBLIC_LEGAL_ENTITY || 'SeedBay',
+  legalForm: process.env.NEXT_PUBLIC_LEGAL_FORM || 'SAS',
+  legalAddress: process.env.NEXT_PUBLIC_LEGAL_ADDRESS || 'Paris, France',
+  legalCapital: process.env.NEXT_PUBLIC_LEGAL_CAPITAL || '10 000 EUR',
+  legalSiret: process.env.NEXT_PUBLIC_LEGAL_SIRET || 'À compléter avant exploitation commerciale',
+  legalVat: process.env.NEXT_PUBLIC_LEGAL_VAT || 'À compléter avant exploitation commerciale',
+  publicationDirector: process.env.NEXT_PUBLIC_PUBLICATION_DIRECTOR || 'Amin Dutenao',
+  hostName: 'Vercel Inc.',
+  hostAddress: '440 N Barranca Ave #4133, Covina, CA 91723, USA',
+  hostWebsite: 'https://vercel.com',
+  lastUpdated: '2026-02-18',
+}

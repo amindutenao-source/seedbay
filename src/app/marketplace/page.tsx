@@ -50,6 +50,9 @@ export default async function MarketplacePage({ searchParams }: MarketplaceProps
               SeedBay
             </Link>
             <div className="flex items-center space-x-4">
+              <Link href="/contact" className="text-gray-300 hover:text-white">
+                Contact
+              </Link>
               <Link href="/auth/login" className="text-gray-300 hover:text-white">
                 Connexion
               </Link>

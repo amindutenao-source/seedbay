@@ -94,13 +94,33 @@ export async function requireAuth(_request: NextRequest): Promise<AuthResult> {
       }
     }
 
+    const authConfirmedAt = (() => {
+      const maybeUser = user as { email_confirmed_at?: string | null; confirmed_at?: string | null }
+      return maybeUser.email_confirmed_at || maybeUser.confirmed_at || null
+    })()
+
+    const isEmailVerified = profile.email_verified_at !== null || authConfirmedAt !== null
+
+    if (!profile.email_verified_at && authConfirmedAt) {
+      try {
+        const supabaseAdmin = createSupabaseAdminClient()
+        await supabaseAdmin
+          .from('users')
+          .update({ email_verified_at: authConfirmedAt })
+          .eq('id', user.id)
+          .is('email_verified_at', null)
+      } catch (syncError) {
+        console.error('Email verification sync error:', syncError)
+      }
+    }
+
     return {
       success: true,
       user: {
         id: user.id,
         email: user.email!,
         role: profile.role as UserRole,
-        emailVerified: profile.email_verified_at !== null
+        emailVerified: isEmailVerified
       },
       error: null
     }
@@ -170,7 +190,7 @@ export async function requireEmailVerified(request: NextRequest): Promise<AuthRe
     return {
       success: false,
       user: authResult.user,
-      error: 'Veuillez vérifier votre email avant de continuer'
+      error: 'Veuillez vérifier votre email via le lien reçu, puis reconnectez-vous.'
     }
   }
 

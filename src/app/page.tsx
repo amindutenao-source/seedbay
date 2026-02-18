@@ -234,23 +234,23 @@ export default function Home() {
               <ul className="space-y-3">
                 <li><Link href="/marketplace" className="text-gray-400 hover:text-white transition-colors text-sm">Marketplace</Link></li>
                 <li><Link href="#features" className="text-gray-400 hover:text-white transition-colors text-sm">Fonctionnalités</Link></li>
-                <li><Link href="#" className="text-gray-400 hover:text-white transition-colors text-sm">Tarifs</Link></li>
+                <li><Link href="/tarifs" className="text-gray-400 hover:text-white transition-colors text-sm">Tarifs</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold text-white mb-4">Entreprise</h4>
               <ul className="space-y-3">
-                <li><Link href="#" className="text-gray-400 hover:text-white transition-colors text-sm">À propos</Link></li>
-                <li><Link href="#" className="text-gray-400 hover:text-white transition-colors text-sm">Blog</Link></li>
-                <li><Link href="#" className="text-gray-400 hover:text-white transition-colors text-sm">Contact</Link></li>
+                <li><Link href="/a-propos" className="text-gray-400 hover:text-white transition-colors text-sm">À propos</Link></li>
+                <li><Link href="/blog" className="text-gray-400 hover:text-white transition-colors text-sm">Blog</Link></li>
+                <li><Link href="/contact" className="text-gray-400 hover:text-white transition-colors text-sm">Contact</Link></li>
               </ul>
             </div>
             <div>
               <h4 className="font-semibold text-white mb-4">Légal</h4>
               <ul className="space-y-3">
-                <li><Link href="#" className="text-gray-400 hover:text-white transition-colors text-sm">Confidentialité</Link></li>
-                <li><Link href="#" className="text-gray-400 hover:text-white transition-colors text-sm">CGU</Link></li>
-                <li><Link href="#" className="text-gray-400 hover:text-white transition-colors text-sm">CGV</Link></li>
+                <li><Link href="/legal/privacy" className="text-gray-400 hover:text-white transition-colors text-sm">Confidentialité</Link></li>
+                <li><Link href="/legal/cgu" className="text-gray-400 hover:text-white transition-colors text-sm">CGU</Link></li>
+                <li><Link href="/legal/cgv" className="text-gray-400 hover:text-white transition-colors text-sm">CGV</Link></li>
               </ul>
             </div>
           </div>

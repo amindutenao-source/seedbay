@@ -4,6 +4,13 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+function resolveRedirect(path: string | null): string {
+  if (!path) return '/marketplace'
+  if (!path.startsWith('/')) return '/marketplace'
+  if (path.startsWith('//')) return '/marketplace'
+  return path
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -29,7 +36,12 @@ export default function LoginPage() {
         return
       }
 
-      router.push('/marketplace')
+      const redirectParam = typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('redirect')
+        : null
+      const redirectTo = resolveRedirect(redirectParam)
+      router.push(redirectTo)
+      router.refresh()
     } catch {
       setError('Erreur de connexion au serveur')
     } finally {
@@ -91,6 +103,11 @@ export default function LoginPage() {
             >
               {loading ? 'Connexion...' : 'Se connecter'}
             </button>
+
+            <p className="text-xs text-gray-500">
+              En vous connectant, vous acceptez nos <Link href="/legal/cgu" className="text-blue-400 hover:text-blue-300">CGU</Link>,
+              nos <Link href="/legal/cgv" className="text-blue-400 hover:text-blue-300">CGV</Link> et notre <Link href="/legal/privacy" className="text-blue-400 hover:text-blue-300">politique de confidentialité</Link>.
+            </p>
           </form>
 
           <p className="text-center text-gray-400 mt-6">

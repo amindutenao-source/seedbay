@@ -84,6 +84,19 @@ export async function POST(request: NextRequest) {
       .eq('id', data.user.id)
       .single()
 
+    const authConfirmedAt = (() => {
+      const maybeUser = data.user as { email_confirmed_at?: string | null; confirmed_at?: string | null }
+      return maybeUser.email_confirmed_at || maybeUser.confirmed_at || null
+    })()
+
+    if (profile && !profile.email_verified_at && authConfirmedAt) {
+      await supabase
+        .from('users')
+        .update({ email_verified_at: authConfirmedAt })
+        .eq('id', data.user.id)
+        .is('email_verified_at', null)
+    }
+
     // 4. Logger la connexion réussie
     await logAudit(
       data.user.id,
@@ -104,7 +117,7 @@ export async function POST(request: NextRequest) {
         email: data.user.email,
         username: profile?.username,
         role: profile?.role || 'buyer',
-        emailVerified: profile?.email_verified_at !== null,
+        emailVerified: (profile?.email_verified_at !== null) || !!authConfirmedAt,
         avatarUrl: profile?.avatar_url,
       },
     })
