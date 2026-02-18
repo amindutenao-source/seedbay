@@ -182,7 +182,7 @@ export default function SignupClient() {
                 placeholder="••••••••••••"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Min. 12 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 spécial
+                Min. 12 caractères, 1 majuscule, 1 minuscule, 1 chiffre, 1 spécial (ex: !@#$%^&*)
               </p>
             </div>
 

@@ -87,6 +87,10 @@ export async function POST(request: NextRequest) {
         return badRequestResponse('Cet email est déjà utilisé')
       }
 
+      if (authError.message.toLowerCase().includes('password')) {
+        return badRequestResponse('Mot de passe invalide. Utilisez 12+ caractères avec majuscule, minuscule, chiffre et un caractère spécial ASCII (ex: !@#$%^&*).')
+      }
+
       // Autoriser les emails .test (GoTrue peut les refuser par défaut)
       if (isTestEmail && authError.message.toLowerCase().includes('email address') && authError.message.toLowerCase().includes('invalid')) {
         const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({

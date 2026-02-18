@@ -24,6 +24,9 @@ export interface AuthResult {
 // VALIDATION SCHEMAS (Zod)
 // ============================================================================
 
+// Keep this aligned with Supabase/Gotrue accepted special characters.
+const PASSWORD_SPECIAL_CHAR_REGEX = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/
+
 export const SignupSchema = z.object({
   email: z.string().trim().email('Email invalide'),
   password: z
@@ -32,7 +35,10 @@ export const SignupSchema = z.object({
     .regex(/[A-Z]/, 'Le mot de passe doit contenir au moins une majuscule')
     .regex(/[a-z]/, 'Le mot de passe doit contenir au moins une minuscule')
     .regex(/[0-9]/, 'Le mot de passe doit contenir au moins un chiffre')
-    .regex(/[^A-Za-z0-9]/, 'Le mot de passe doit contenir au moins un caractère spécial'),
+    .regex(
+      PASSWORD_SPECIAL_CHAR_REGEX,
+      'Le mot de passe doit contenir au moins un caractère spécial (ex: !@#$%^&*)'
+    ),
   username: z
     .string()
     .trim()

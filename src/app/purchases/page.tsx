@@ -1,153 +1,91 @@
-/**
- * Purchases Page
- * /purchases
- * 
- * Liste des achats de l'utilisateur avec accès aux téléchargements
- */
-
-'use client'
-
-import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { createBrowserClient } from '@/lib/supabase-browser'
+import { redirect } from 'next/navigation'
+import DownloadFilesButton from '@/components/download-files-button'
+import { createSupabaseServerClient } from '@/lib/supabase-server'
 
 export const dynamic = 'force-dynamic'
 
-interface Purchase {
-  id: string;
-  order_id: string;
-  created_at: string;
+interface PurchaseRow {
+  id: string
+  order_id: string
+  created_at: string
   order: {
-    amount: number;
-    status: string;
-  } | null;
+    amount: number
+    status: string
+  } | null
   project: {
-    id: string;
-    slug: string;
-    title: string;
-    description: string;
-    thumbnail_url: string | null;
-  };
+    id: string
+    slug: string
+    title: string
+    description: string
+    thumbnail_url: string | null
+  } | null
 }
 
-export default function PurchasesPage() {
-  const [purchases, setPurchases] = useState<Purchase[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+export default async function PurchasesPage() {
+  const supabase = await createSupabaseServerClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  useEffect(() => {
-    async function loadPurchases() {
-      try {
-        const supabase = createBrowserClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        
-        if (!user) {
-          setError('Please log in to view your purchases')
-          setLoading(false)
-          return
-        }
-
-        const { data, error: fetchError } = await supabase
-          .from('purchases')
-          .select(`
-            id,
-            order_id,
-            created_at,
-            order:orders!order_id (
-              amount,
-              status
-            ),
-            project:projects!project_id (
-              id,
-              slug,
-              title,
-              description,
-              thumbnail_url
-            )
-          `)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-
-        if (fetchError) throw fetchError
-        setPurchases(data || [])
-      } catch (err) {
-        console.error('Error loading purchases:', err)
-        setError('Failed to load purchases')
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadPurchases()
-  }, [])
-
-  async function handleDownload(orderId: string) {
-    setDownloadingId(orderId)
-    try {
-      const supabase = createBrowserClient()
-      // Récupérer les fichiers de la commande
-      const { data: filesData, error: filesError } = await supabase
-        .from('deliverables')
-        .select('id')
-        .eq('order_id', orderId)
-
-      if (filesError) throw filesError
-
-      const files = (filesData ?? []) as Array<{ id: string }>
-
-      if (files.length === 0) {
-        alert('No files available for download')
-        return
-      }
-
-      // Télécharger chaque fichier
-      for (const file of files) {
-        const response = await fetch('/api/files/download', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order_id: orderId, deliverable_id: file.id }),
-        })
-        const data = await response.json()
-
-        if (data.download_url) {
-          // Ouvrir le lien de téléchargement
-          window.open(data.download_url, '_blank')
-        }
-      }
-    } catch (err) {
-      console.error('Download error:', err)
-      alert('Failed to download files')
-    } finally {
-      setDownloadingId(null)
-    }
+  if (!user) {
+    redirect('/auth/login?redirect=/purchases')
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
-      </div>
-    )
-  }
+  const { data, error } = await supabase
+    .from('purchases')
+    .select(`
+      id,
+      order_id,
+      created_at,
+      order:orders!order_id (
+        amount,
+        status
+      ),
+      project:projects!project_id (
+        id,
+        slug,
+        title,
+        description,
+        thumbnail_url
+      )
+    `)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
 
   if (error) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-600 mb-4">{error}</p>
-          <Link href="/auth/login" className="text-green-600 hover:underline">
-            Go to Login
+          <p className="text-red-600 mb-4">Failed to load purchases</p>
+          <Link href="/marketplace" className="text-green-600 hover:underline">
+            Browse marketplace
           </Link>
         </div>
       </div>
     )
   }
 
+  const purchases = (data || []) as PurchaseRow[]
+  const orderIds = purchases.map((purchase) => purchase.order_id)
+
+  let deliverablesByOrder = new Map<string, string[]>()
+  if (orderIds.length > 0) {
+    const { data: deliverables } = await supabase
+      .from('deliverables')
+      .select('id, order_id')
+      .in('order_id', orderIds)
+
+    for (const row of deliverables || []) {
+      const list = deliverablesByOrder.get(row.order_id) || []
+      list.push(row.id)
+      deliverablesByOrder.set(row.order_id, list)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <h1 className="text-2xl font-bold text-gray-900">My Purchases</h1>
@@ -158,95 +96,72 @@ export default function PurchasesPage() {
         {purchases.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-8 text-center">
             <p className="text-gray-500 mb-4">You haven&apos;t made any purchases yet.</p>
-            <Link
-              href="/marketplace"
-              className="text-green-600 hover:underline"
-            >
+            <Link href="/marketplace" className="text-green-600 hover:underline">
               Browse the marketplace
             </Link>
           </div>
         ) : (
           <div className="grid gap-6">
-            {purchases.map((purchase) => (
-              <div
-                key={purchase.id}
-                className="bg-white rounded-lg shadow overflow-hidden"
-              >
-                <div className="p-6 flex items-start gap-6">
-                  {/* Thumbnail */}
-                  <div className="w-32 h-24 bg-gray-200 rounded-lg flex-shrink-0 overflow-hidden">
-                    {purchase.project.thumbnail_url ? (
-                      <Image
-                        src={purchase.project.thumbnail_url}
-                        alt={purchase.project.title}
-                        width={128}
-                        height={96}
-                        className="w-full h-full object-cover"
-                        sizes="128px"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400">
-                        📦
-                      </div>
-                    )}
-                  </div>
+            {purchases.map((purchase) => {
+              if (!purchase.project) {
+                return null
+              }
 
-                  {/* Info */}
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {purchase.project.title}
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-1 line-clamp-2">
-                      {purchase.project.description}
-                    </p>
-                    <div className="mt-2 flex items-center gap-4 text-sm text-gray-500">
-                      <span>Purchased {new Date(purchase.created_at).toLocaleDateString()}</span>
-                      <span>•</span>
-                      <span>${(purchase.order?.amount || 0).toFixed(2)}</span>
+              const deliverableIds = deliverablesByOrder.get(purchase.order_id) || []
+
+              return (
+                <div
+                  key={purchase.id}
+                  className="bg-white rounded-lg shadow overflow-hidden"
+                >
+                  <div className="p-6 flex items-start gap-6">
+                    <div className="w-32 h-24 bg-gray-200 rounded-lg flex-shrink-0 overflow-hidden">
+                      {purchase.project.thumbnail_url ? (
+                        <Image
+                          src={purchase.project.thumbnail_url}
+                          alt={purchase.project.title}
+                          width={128}
+                          height={96}
+                          className="w-full h-full object-cover"
+                          sizes="128px"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-400">
+                          📦
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {purchase.project.title}
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                        {purchase.project.description}
+                      </p>
+                      <div className="mt-2 flex items-center gap-4 text-sm text-gray-500">
+                        <span>Purchased {new Date(purchase.created_at).toLocaleDateString()}</span>
+                        <span>•</span>
+                        <span>${(purchase.order?.amount || 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex-shrink-0 flex gap-3">
+                      <Link
+                        href={`/projects/${purchase.project.slug}`}
+                        className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
+                      >
+                        View Project
+                      </Link>
+                      <DownloadFilesButton
+                        orderId={purchase.order_id}
+                        deliverableIds={deliverableIds}
+                      />
                     </div>
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex-shrink-0 flex gap-3">
-                    <Link
-                      href={`/projects/${purchase.project.slug}`}
-                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
-                    >
-                      View Project
-                    </Link>
-                    <button
-                      onClick={() => handleDownload(purchase.order_id)}
-                      disabled={downloadingId === purchase.order_id}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
-                    >
-                      {downloadingId === purchase.order_id ? (
-                        <span className="flex items-center gap-2">
-                          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                              fill="none"
-                            />
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            />
-                          </svg>
-                          Downloading...
-                        </span>
-                      ) : (
-                        '⬇ Download Files'
-                      )}
-                    </button>
-                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </main>
